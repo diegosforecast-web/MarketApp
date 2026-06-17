@@ -1,0 +1,39 @@
+name: Deploy to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Build image
+        run: |
+          gcloud builds submit --tag gcr.io/diego-market-forecast/market-forecast:latest
+
+      - name: Tag as prod
+        run: |
+          gcloud container images add-tag \
+            gcr.io/diego-market-forecast/market-forecast:latest \
+            gcr.io/diego-market-forecast/market-forecast:prod --quiet
+
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy market-forecast \
+            --image gcr.io/diego-market-forecast/market-forecast:prod \
+            --region=us-central1 \
+            --allow-unauthenticated
