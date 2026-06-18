@@ -87,3 +87,7 @@ def forecast(req: ForecastRequest):
 @app.get("/system-user")
 def system_user():
     return {"system_user_id": str(uuid.uuid4())}
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
