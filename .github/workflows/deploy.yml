@@ -1,3 +1,4 @@
+# updated
 name: Deploy to Cloud Run
 
 on:
@@ -24,6 +25,7 @@ jobs:
     - name: Build and Push Image
       run: |
         IMAGE="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/market-registry/market-app:${{ github.sha }}"
+        echo "Using IMAGE=$IMAGE"
         docker build -t "$IMAGE" .
         docker push "$IMAGE"
 
@@ -40,7 +42,7 @@ jobs:
       run: |
         echo "Waiting for staging to become healthy..."
         sleep 10
-        curl -f https://market-forecast-staging-133361672503-uc.a.run.app/health || exit 1
+        curl -f https://market-forecast-staging-133361672503.us-central1.run.app/health
 
     - name: Deploy to PROD
       run: |
