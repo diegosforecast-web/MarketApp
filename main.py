@@ -40,6 +40,7 @@ class ForecastRequest(BaseModel):
 # ---------------------------------------------------------
 @app.get("/health")
 def health():
+    logger.info("HEALTH CHECK HIT")
     return {"status": "ok"}
 
 # ---------------------------------------------------------
