@@ -7,6 +7,10 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 
-ENV PORT=8080
+# Ensure model + scaler are included
+COPY models/lstm_model.h5 models/lstm_model.h5
+COPY models/scaler.pkl models/scaler.pkl
+
+EXPOSE 8080
 
 CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8080"]
