@@ -1,93 +1,112 @@
-import os
-import uuid
-import logging
 from fastapi import FastAPI, HTTPException
-from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
+import numpy as np
+import datetime
+import tensorflow as tf
+import pickle
+import os
 import yfinance as yf
 
-# ---------------------------------------------------------
-# App Initialization
-# ---------------------------------------------------------
 app = FastAPI()
 
-# ---------------------------------------------------------
-# CORS (allow frontend + Cloud Run)
-# ---------------------------------------------------------
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],  # You can restrict this later
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
-
-# ---------------------------------------------------------
-# Logging
-# ---------------------------------------------------------
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger("market-forecast")
-
-# ---------------------------------------------------------
-# Models
-# ---------------------------------------------------------
-class ForecastRequest(BaseModel):
-    ticker: str
-    days: int = 7
-
-# ---------------------------------------------------------
-# Health Check Endpoint (required for CI/CD)
-# ---------------------------------------------------------
+# ---------------------------------------------------
+# Health Check
+# ---------------------------------------------------
 @app.get("/health")
 def health():
-    logger.info("HEALTH CHECK HIT")
     return {"status": "ok"}
 
-# ---------------------------------------------------------
-# Root Endpoint
-# ---------------------------------------------------------
-@app.get("/")
-def root():
-    return {"message": "Market Forecast API is running"}
 
-# ---------------------------------------------------------
+# ---------------------------------------------------
+# Request model
+# ---------------------------------------------------
+class ForecastRequest(BaseModel):
+    ticker: str
+    days: int = 1
+
+
+# ---------------------------------------------------
+# Paths for model + scaler
+# ---------------------------------------------------
+MODEL_PATH = "models/lstm_model.h5"
+SCALER_PATH = "models/scaler.pkl"
+
+model = None
+scaler = None
+
+
+def load_assets():
+    """Load model and scaler once per container."""
+    global model, scaler
+
+    if model is None:
+        if not os.path.exists(MODEL_PATH):
+            raise FileNotFoundError(f"Model not found at {MODEL_PATH}")
+        model = tf.keras.models.load_model(MODEL_PATH)
+
+    if scaler is None:
+        if not os.path.exists(SCALER_PATH):
+            raise FileNotFoundError(f"Scaler not found at {SCALER_PATH}")
+        with open(SCALER_PATH, "rb") as f:
+            scaler = pickle.load(f)
+
+
+# ---------------------------------------------------
+# Fetch last 60 closes from Yahoo Finance
+# ---------------------------------------------------
+def fetch_last_60_closes(ticker: str):
+    # 90 days window to avoid weekends/holidays gaps
+    data = yf.download(ticker, period="90d", interval="1d")
+    closes = data["Close"].dropna().values
+
+    if len(closes) < 60:
+        raise ValueError(f"Not enough data for {ticker}. Needed 60 closes, got {len(closes)}.")
+
+    return closes[-60:]
+
+
+# ---------------------------------------------------
+# Preprocessing helper
+# ---------------------------------------------------
+def prepare_input(last_sequence):
+    """
+    last_sequence: numpy array of shape (60,)
+    """
+    seq = last_sequence.reshape(-1, 1)
+    seq_scaled = scaler.transform(seq)
+    return seq_scaled.reshape(1, 60, 1)
+
+
+# ---------------------------------------------------
+# Real model inference with real data
+# ---------------------------------------------------
+def run_model(ticker: str, days: int):
+    load_assets()
+
+    last_60 = fetch_last_60_closes(ticker)
+    X = prepare_input(last_60)
+
+    pred_scaled = model.predict(X)[0][0]
+    pred = scaler.inverse_transform([[pred_scaled]])[0][0]
+
+    return float(pred)
+
+
+# ---------------------------------------------------
 # Forecast Endpoint
-# ---------------------------------------------------------
+# ---------------------------------------------------
 @app.post("/forecast")
 def forecast(req: ForecastRequest):
     try:
-        ticker = req.ticker.upper()
-        days = req.days
-
-        logger.info(f"Fetching data for {ticker}")
-
-        data = yf.download(ticker, period="1y", interval="1d")
-
-        if data.empty:
-            raise HTTPException(status_code=404, detail="Ticker not found or no data available")
-
-        # Simple forecast logic (placeholder)
-        last_price = float(data["Close"].iloc[-1])
-        forecast_values = [round(last_price * (1 + 0.01 * i), 2) for i in range(1, days + 1)]
+        pred = run_model(req.ticker, req.days)
 
         return {
-            "ticker": ticker,
-            "last_price": last_price,
-            "forecast_days": days,
-            "forecast": forecast_values,
+            "ticker": req.ticker.upper(),
+            "days_ahead": req.days,
+            "prediction": pred,
+            "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+            "status": "success"
         }
 
     except Exception as e:
-        logger.error(f"Error forecasting {req.ticker}: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
-# ---------------------------------------------------------
-# Generate Unique System User ID (example)
-# ---------------------------------------------------------
-@app.get("/system-user")
-def system_user():
-    return {"system_user_id": str(uuid.uuid4())}
-@app.get("/health")
-def health():
-    return {"status": "ok"}
-
