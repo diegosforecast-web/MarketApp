@@ -1,4 +1,4 @@
-name: Deploy to Cloud Run
+name: Deploy to Cloud Run (staging → prod)
 
 on:
   push:
@@ -6,34 +6,84 @@ on:
       - main
 
 jobs:
-  deploy:
+  deploy-staging:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Authenticate to Google Cloud
-        uses: google-github-actions/auth@v2
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
         with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
           credentials_json: ${{ secrets.GCP_SA_KEY }}
 
-      - name: Configure gcloud
-        uses: google-github-actions/setup-gcloud@v2
-
-      - name: Build image
+      - name: Configure Docker auth
         run: |
-          gcloud builds submit --tag gcr.io/diego-market-forecast/market-forecast:latest
+          gcloud auth configure-docker us-central1-docker.pkg.dev
 
-      - name: Tag as prod
+      - name: Build and push image
         run: |
-          gcloud container images add-tag \
-            gcr.io/diego-market-forecast/market-forecast:latest \
-            gcr.io/diego-market-forecast/market-forecast:prod --quiet
+          IMAGE="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/market-registry/market-app:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+        env:
+          DOCKER_BUILDKIT: 1
 
-      - name: Deploy to Cloud Run
+      - name: Deploy to STAGING
         run: |
-          gcloud run deploy market-forecast \
-            --image gcr.io/diego-market-forecast/market-forecast:prod \
+          IMAGE="us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/market-registry/market-app:${{ github.sha }}"
+          gcloud run deploy market-forecast-staging \
+            --image="$IMAGE" \
             --region=us-central1 \
-            --allow-unauthenticated
+            --platform=managed \
+            --allow-unauthenticated \
+            --max-instances=3 \
+            --min-instances=1
+
+      - name: Health check STAGING
+        run: |
+          URL=$(gcloud run services describe market-forecast-staging \
+            --region=us-central1 \
+            --platform=managed \
+            --format='value(status.url)')
+          echo "Staging URL: $URL"
+          curl -f "$URL/health" || exit 1
+
+  promote-to-prod:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Promote STAGING image to PROD
+        run: |
+          IMAGE=$(gcloud run services describe market-forecast-staging \
+            --region=us-central1 \
+            --platform=managed \
+            --format='value(spec.template.spec.containers[0].image)')
+
+          echo "Promoting image: $IMAGE"
+
+          gcloud run deploy market-forecast-prod \
+            --image="$IMAGE" \
+            --region=us-central1 \
+            --platform=managed \
+            --allow-unauthenticated \
+            --max-instances=5 \
+            --min-instances=1
+
+      - name: Health check PROD
+        run: |
+          URL=$(gcloud run services describe market-forecast-prod \
+            --region=us-central1 \
+            --platform=managed \
+            --format='value(status.url)')
+          echo "Prod URL: $URL"
+          curl -f "$URL/health" || exit 1
