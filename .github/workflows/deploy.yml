@@ -1,3 +1,4 @@
+git log --name-only -n 5
 name: Deploy to Cloud Run
 
 on:
