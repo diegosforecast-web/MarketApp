@@ -10,12 +10,18 @@ import yfinance as yf
 app = FastAPI()
 
 # ---------------------------------------------------
+# Root Route (Fixes Cloud Run "Not Found")
+# ---------------------------------------------------
+@app.get("/")
+def root():
+    return {"status": "running", "message": "FastAPI is live"}
+
+# ---------------------------------------------------
 # Health Check
 # ---------------------------------------------------
 @app.get("/health")
 def health():
     return {"status": "ok"}
-
 
 # ---------------------------------------------------
 # Request model
@@ -23,7 +29,6 @@ def health():
 class ForecastRequest(BaseModel):
     ticker: str
     days: int = 1
-
 
 # ---------------------------------------------------
 # Paths for model + scaler
@@ -33,7 +38,6 @@ SCALER_PATH = "models/scaler.pkl"
 
 model = None
 scaler = None
-
 
 def load_assets():
     """Load model and scaler once per container."""
@@ -50,12 +54,10 @@ def load_assets():
         with open(SCALER_PATH, "rb") as f:
             scaler = pickle.load(f)
 
-
 # ---------------------------------------------------
 # Fetch last 60 closes from Yahoo Finance
 # ---------------------------------------------------
 def fetch_last_60_closes(ticker: str):
-    # 90 days window to avoid weekends/holidays gaps
     data = yf.download(ticker, period="90d", interval="1d")
     closes = data["Close"].dropna().values
 
@@ -64,18 +66,13 @@ def fetch_last_60_closes(ticker: str):
 
     return closes[-60:]
 
-
 # ---------------------------------------------------
 # Preprocessing helper
 # ---------------------------------------------------
 def prepare_input(last_sequence):
-    """
-    last_sequence: numpy array of shape (60,)
-    """
     seq = last_sequence.reshape(-1, 1)
     seq_scaled = scaler.transform(seq)
     return seq_scaled.reshape(1, 60, 1)
-
 
 # ---------------------------------------------------
 # Real model inference with real data
@@ -90,7 +87,6 @@ def run_model(ticker: str, days: int):
     pred = scaler.inverse_transform([[pred_scaled]])[0][0]
 
     return float(pred)
-
 
 # ---------------------------------------------------
 # Forecast Endpoint
