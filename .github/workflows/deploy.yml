@@ -11,7 +11,7 @@ jobs:
     steps:
     - name: Checkout code
       uses: actions/checkout@v3
- 
+
     - name: Authenticate to Google Cloud
       uses: google-github-actions/auth@v1
       with:
@@ -32,6 +32,6 @@ jobs:
       run: |
         gcloud run deploy market-forecast-staging \
           --image us-central1-docker.pkg.dev/${{ secrets.GCP_PROJECT }}/market-forecast/marketapp:latest \
-          --region us-central 1\
+          --region us-central1 \
           --platform managed \
           --allow-unauthenticated
