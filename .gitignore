@@ -1,0 +1,98 @@
+# =========================
+# Secrets
+# =========================
+.env
+.env.*
+service_account.json
+
+# =========================
+# Python
+# =========================
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.pyc
+
+# =========================
+# Virtual Environments
+# =========================
+backend/venv/
+backend/venv310/
+src/MarketApp/backend/venv/
+venv/
+venv310/
+.venv/
+env/
+
+# =========================
+# Build Artifacts
+# =========================
+build/
+dist/
+*.egg-info/
+*.txt
+
+# =========================
+# Models
+# =========================
+*.h5
+*.pkl
+*.pt
+
+# =========================
+# Archives / Backups
+# =========================
+*.zip
+
+# =========================
+# Pytest
+# =========================
+.pytest_cache/
+
+# =========================
+# Jupyter
+# =========================
+.ipynb_checkpoints/
+
+# =========================
+# Operating System Files
+# =========================
+Thumbs.db
+.DS_Store
+
+# =========================
+# Recovery Artifacts
+# =========================
+recovery/
+
+# Generated reports
+changed_files.txt
+cleanup_summary.txt
+git_status.txt
+repo_status.txt
+git_python_artifacts.txt
+git_status_after_cleanup.txt
+git_status_summary.txt
+largest_files.txt
+engine_dump.txt
+recovery_dump.txt
+recovery_contents.txt
+
+# Generated checks
+*_check.txt
+*_status.txt
+*_summary.txt
+recovery_*.txt
+sensitive_files.txt
+staged_changes.txt
+staged_changes_v2.txt
+
+# Validation / audit files
+env_check.txt
+secrets_check.txt
+secrets_status.txt
+gitignore_check.txt
+
+# Recovery scripts
+recovery/*.py

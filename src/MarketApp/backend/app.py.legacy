@@ -1,0 +1,167 @@
+import os
+import uvicorn
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
+
+from models.gru import GRUModel
+from models.tft import TFTModel
+from models.gbm import GBMModel
+from models.linear import LinearModel
+from models.regime import RegimeModel
+from models.ensemble import EnsembleModel
+from models.confidence import ConfidenceModel
+
+from core.data_loader import load_price_history
+from endpoints.compare_models import router as compare_models_router
+
+
+  # adjust if your loader path/name differs
+
+app = FastAPI(
+    title="MarketApp Backend",
+    version="1.0.0",
+    description="Forecasting backend with GRU, TFT, GBM, Linear, Regime, Ensemble, and Confidence intervals.",
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+app.include_router(compare_models_router, prefix="/api/v1")
+
+
+@app.get("/health")
+def health():
+    return {"status": "ok"}
+
+
+@app.get("/")
+def root():
+    return {
+        "service": "MarketApp Backend",
+        "status": "running",
+        "endpoints": [
+            "/health",
+            "/forecast",
+            "/compare_models",
+        ],
+    }
+
+
+@app.get("/forecast")
+def forecast(
+    ticker: str = Query(..., description="Asset ticker symbol"),
+    horizon: int = Query(5, ge=1, le=60, description="Forecast horizon in days"),
+    model: str = Query(
+        "ensemble",
+        description="Model to use: gru, tft, gbm, linear, ensemble",
+    ),
+):
+    """
+    Main forecasting endpoint.
+    """
+
+    # 1. Load price history
+    try:
+        series = load_price_history(ticker)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load data for {ticker}: {e}")
+
+    if not series or len(series) < 10:
+        raise HTTPException(status_code=400, detail="Not enough data to forecast.")
+
+    # 2. Instantiate models
+    gru = GRUModel()
+    tft = TFTModel()
+    gbm = GBMModel()
+    linear = LinearModel()
+    regime = RegimeModel()
+    confidence = ConfidenceModel()
+
+    # 3. Select model
+    model = model.lower()
+    if model == "gru":
+        preds = gru.predict(series, horizon)
+    elif model == "tft":
+        preds = tft.predict(series, horizon)
+    elif model == "gbm":
+        preds = gbm.predict(series, horizon)
+    elif model == "linear":
+        preds = linear.predict(series, horizon)
+    elif model == "ensemble":
+        ensemble = EnsembleModel()
+        preds = ensemble.predict(series, horizon)
+    else:
+        raise HTTPException(status_code=400, detail=f"Unknown model: {model}")
+
+    # 4. Confidence intervals (always on predictions)
+    ci = confidence.compute(preds)
+
+    return {
+        "ticker": ticker,
+        "horizon": horizon,
+        "model": model,
+        "predictions": preds,
+        "confidence": ci,
+    }
+
+
+@app.get("/compare_models")
+def compare_models(
+    ticker: str = Query(..., description="Asset ticker symbol"),
+    horizon: int = Query(5, ge=1, le=60, description="Forecast horizon in days"),
+):
+    """
+    Compare all core models on the same series.
+    """
+
+    # 1. Load price history
+    try:
+        series = load_price_history(ticker)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to load data for {ticker}: {e}")
+
+    if not series or len(series) < 10:
+        raise HTTPException(status_code=400, detail="Not enough data to forecast.")
+
+    # 2. Instantiate models
+    gru = GRUModel()
+    tft = TFTModel()
+    gbm = GBMModel()
+    linear = LinearModel()
+    regime = RegimeModel()
+    ensemble = EnsembleModel()
+    confidence = ConfidenceModel()
+
+    # 3. Run all models
+    gru_pred = gru.predict(series, horizon)
+    tft_pred = tft.predict(series, horizon)
+    gbm_pred = gbm.predict(series, horizon)
+    linear_pred = linear.predict(series, horizon)
+    ensemble_pred = ensemble.predict(series, horizon)
+
+    # 4. Confidence on ensemble
+    ci = confidence.compute(ensemble_pred)
+
+    return {
+        "ticker": ticker,
+        "horizon": horizon,
+        "regime": regime.predict(series),
+        "models": {
+            "gru": gru_pred,
+            "tft": tft_pred,
+            "gbm": gbm_pred,
+            "linear": linear_pred,
+            "ensemble": ensemble_pred,
+        },
+        "confidence": ci,
+    }
+
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run("app:app", host="0.0.0.0", port=port, reload=True)
