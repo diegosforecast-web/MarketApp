@@ -181,7 +181,7 @@ def check_limits(days):
 # -----------------------------
 # BACKEND CALL
 # -----------------------------
-BACKEND_URL = os.getenv("BACKEND_URL", "https://YOUR_CLOUD_RUN_URL")
+BACKEND_URL = os.getenv("BACKEND_URL", "https://market-forecast-prod-133361672503.us-central1.run.app")
 
 def call_api(endpoint, payload):
     try:
