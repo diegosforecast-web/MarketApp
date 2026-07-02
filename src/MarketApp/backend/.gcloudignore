@@ -1,0 +1,15 @@
+venv/
+venv310/
+
+__pycache__/
+*.pyc
+
+.git/
+.gitignore
+
+.env
+
+tests/
+test/
+
+*.log
