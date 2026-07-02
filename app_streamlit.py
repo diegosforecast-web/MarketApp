@@ -14,7 +14,9 @@ firebase_config = {
     "storageBucket": "diego-market-forecast.firebasestorage.app",
     "messagingSenderId": "133361672503",
     "appId": "1:133361672503:web:18dc7766a082d340663ab2",
+    "databaseURL": ""  
 }
+
 
 firebase = pyrebase.initialize_app(firebase_config)
 auth = firebase.auth()
