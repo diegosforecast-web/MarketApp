@@ -1,7 +1,46 @@
+import streamlit as st
+import pyrebase
 import os
 import requests
-import streamlit as st
 import plotly.graph_objects as go
+
+# -----------------------------
+# FIREBASE CONFIG
+# -----------------------------
+firebase_config = {
+    "apiKey": "AIzaSyAQjWc74RTNi4x9ZySMOZZw1fbF3TIjsRk",
+    "authDomain": "diego-market-forecast.firebaseapp.com",
+    "projectId": "diego-market-forecast",
+    "storageBucket": "diego-market-forecast.firebasestorage.app",
+    "messagingSenderId": "133361672503",
+    "appId": "1:133361672503:web:18dc7766a082d340663ab2",
+}
+
+firebase = pyrebase.initialize_app(firebase_config)
+auth = firebase.auth()
+
+# -----------------------------
+# LOGIN UI
+# -----------------------------
+st.title("📊 Market Forecast Dashboard")
+
+if "user" not in st.session_state:
+    st.subheader("Login")
+
+    email = st.text_input("Email")
+    password = st.text_input("Password", type="password")
+
+    if st.button("Login"):
+        try:
+            user = auth.sign_in_with_email_and_password(email, password)
+            st.session_state["user"] = user
+            st.success("✅ Logged in")
+            st.rerun()
+        except:
+            st.error("❌ Login failed")
+
+    st.stop()
+
 
 # -----------------------------
 # CONFIG
@@ -164,7 +203,7 @@ def show_assets_table(assets: list[dict]):
 # -----------------------------
 st.title("📊 Market Forecast Dashboard")
 
-token = st.text_input("Access token", type="password")
+
 
 tickers = st.multiselect(
     "Select tickers",
