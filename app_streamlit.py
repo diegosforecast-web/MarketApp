@@ -71,7 +71,7 @@ plan = get_plan(st.session_state["email"])
 col1, col2 = st.columns([1, 6])
 
 with col1:
-    st.image("your_logo.png", width=80)
+    st.image("logo.png", width=80)
 
 with col2:
     st.markdown("# DiMarket")
