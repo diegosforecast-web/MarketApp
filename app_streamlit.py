@@ -9,7 +9,7 @@ import requests
 st.set_page_config(page_title="Market Forecast Dashboard", layout="wide")
 
 # -----------------------------
-# FIREBASE
+# FIREBASE CONFIG
 # -----------------------------
 firebase_config = {
     "apiKey": "AIzaSyAQjWc74RTNi4x9ZySMOZZw1fbF3TIjsRk",
@@ -39,7 +39,7 @@ if "user" not in st.session_state:
             st.session_state["user"] = user
             st.session_state["email"] = email
 
-            # Initialize counters
+            # Free limits
             st.session_state["free_tries"] = 3
             st.session_state["standard_extra_tries"] = 5
             st.session_state["premium_extended_tries"] = 10
@@ -51,40 +51,41 @@ if "user" not in st.session_state:
     st.stop()
 
 # -----------------------------
-# PLANS
+# BACKEND CONFIG
 # -----------------------------
-FREE = "free"
-STANDARD = "standard"
-PREMIUM = "premium"
-GOLD = "gold"
+BACKEND_URL = os.getenv("BACKEND_URL", "https://market-forecast-prod-133361672503.us-central1.run.app")
 
-# TEMP manual assignment
-PLAN_USERS = {
-    "your@email.com": GOLD
-}
+def get_plan(email):
+    try:
+        resp = requests.get(
+            f"{BACKEND_URL}/user-plan",
+            params={"email": email}
+        )
+        return resp.json()["plan"]
+    except:
+        return "free"
 
-plan = PLAN_USERS.get(st.session_state["email"], FREE)
+plan = get_plan(st.session_state["email"])
 
+# -----------------------------
+# TITLE
+# -----------------------------
 st.title("📊 Market Forecast Dashboard")
 
 # -----------------------------
-# SHOW PLAN STATUS
+# PLAN STATUS
 # -----------------------------
-if plan == FREE:
+if plan == "free":
     st.warning(f"Free — {st.session_state['free_tries']} tries left")
 
-elif plan == STANDARD:
-    st.success(
-        f"Standard ($9.99)\nExtra 1–5 day tries left: {st.session_state['standard_extra_tries']}"
-    )
+elif plan == "standard":
+    st.success(f"Standard ✅ | Extra tries left: {st.session_state['standard_extra_tries']}")
 
-elif plan == PREMIUM:
-    st.success(
-        f"Premium ($17)\nExtended tries left: {st.session_state['premium_extended_tries']}"
-    )
+elif plan == "premium":
+    st.success(f"Premium ✅ | Extended tries left: {st.session_state['premium_extended_tries']}")
 
-elif plan == GOLD:
-    st.success("Gold ($49.99) — Unlimited")
+elif plan == "gold":
+    st.success("Gold ✅ Unlimited")
 
 # -----------------------------
 # STRIPE LINKS
@@ -94,13 +95,57 @@ STRIPE_PREMIUM = "https://buy.stripe.com/test_28EeVe1pc2Y071Y5oGcwg01"
 STRIPE_GOLD = "https://buy.stripe.com/test_6oU7sM2tg6acfyucR8cwg02"
 
 # -----------------------------
-# UPGRADE UI
+# PRICING UI
 # -----------------------------
-if plan == FREE:
-    st.subheader("Upgrade")
-    st.markdown(STRIPE_STANDARD)
-    st.markdown(STRIPE_PREMIUM)
-    st.markdown(STRIPE_GOLD)
+st.subheader("🚀 Choose your plan")
+
+col1, col2, col3, col4 = st.columns(4)
+
+# FREE
+with col1:
+    st.markdown("### 🆓 Free")
+    st.write("• 3 total tries")
+    st.write("• 1 ticker")
+    st.write("• 1–5 days")
+    if plan == "free":
+        st.success("Current plan")
+
+# STANDARD
+with col2:
+    st.markdown("### 💵 Standard")
+    st.write("$9.99/month")
+    st.write("• Unlimited 1–3 days")
+    st.write("• 5 tries (1–5 days)")
+    st.write("• Multiple tickers")
+    if plan == "standard":
+        st.success("Your plan ✅")
+    else:
+        if st.button("Upgrade Standard"):
+            st.markdown(STRIPE_STANDARD)
+
+# PREMIUM
+with col3:
+    st.markdown("### 💎 Premium")
+    st.write("$17/month")
+    st.write("• Unlimited 1–5 days")
+    st.write("• 10 tries (6–30 days)")
+    st.write("• Multiple tickers")
+    if plan == "premium":
+        st.success("Your plan ✅")
+    else:
+        if st.button("Upgrade Premium"):
+            st.markdown(STRIPE_PREMIUM)
+
+# GOLD
+with col4:
+    st.markdown("### 🔥 Gold")
+    st.write("$49.99/month")
+    st.write("• Unlimited everything")
+    if plan == "gold":
+        st.success("Your plan ✅")
+    else:
+        if st.button("Upgrade Gold"):
+            st.markdown(STRIPE_GOLD)
 
 # -----------------------------
 # INPUTS
@@ -108,85 +153,53 @@ if plan == FREE:
 tickers = st.multiselect(
     "Tickers",
     ["AAPL", "SPY", "QQQ", "MSFT", "TSLA"],
-    max_selections=1 if plan == FREE else None
+    max_selections=1 if plan == "free" else None
 )
 
-if plan == FREE:
-    forecast_days = st.slider("Days (1–5)", 1, 5, 1)
+if plan == "free":
+    forecast_days = st.slider("Days", 1, 5, 1)
 
-elif plan == STANDARD:
+elif plan == "standard":
     forecast_days = st.slider("Days", 1, 5, 3)
 
-elif plan == PREMIUM:
+elif plan == "premium":
     forecast_days = st.slider("Days", 1, 30, 5)
 
 else:
     forecast_days = st.slider("Days", 1, 90, 10)
 
 # -----------------------------
-# LIMIT LOGIC (EXACT RULES)
+# LIMIT LOGIC
 # -----------------------------
 def check_limits(days):
 
-    if plan == FREE:
+    if plan == "free":
         if st.session_state["free_tries"] <= 0:
             st.error("No free tries left")
             st.stop()
-
-        if days > 5:
-            st.error("Free max = 5 days")
-            st.stop()
-
         st.session_state["free_tries"] -= 1
 
-
-    elif plan == STANDARD:
-        # ✅ Unlimited 1–3 days
-        if days <= 3:
-            return
-
-        # ✅ Only 5 tries for 1–5 days
-        if days <= 5:
+    elif plan == "standard":
+        if days > 3:
             if st.session_state["standard_extra_tries"] <= 0:
-                st.error("No 1–5 day tries left")
+                st.error("No extended tries left")
                 st.stop()
-
             st.session_state["standard_extra_tries"] -= 1
-        else:
-            st.error("Standard max = 5 days")
-            st.stop()
 
-
-    elif plan == PREMIUM:
-        # ✅ Unlimited 1–5 days
-        if days <= 5:
-            return
-
-        # ✅ Only 5 tries 6–30 days
-        if days <= 30:
+    elif plan == "premium":
+        if days > 5:
             if st.session_state["premium_extended_tries"] <= 0:
                 st.error("No extended tries left")
                 st.stop()
-
             st.session_state["premium_extended_tries"] -= 1
-        else:
-            st.error("Premium max = 30 days")
-            st.stop()
-
-
-    elif plan == GOLD:
-        return
-
 
 # -----------------------------
-# BACKEND CALL
+# CALL BACKEND
 # -----------------------------
-BACKEND_URL = os.getenv("BACKEND_URL", "https://market-forecast-prod-133361672503.us-central1.run.app")
-
 def call_api(endpoint, payload):
     try:
-        r = requests.post(f"{BACKEND_URL}{endpoint}", json=payload)
-        return r.json()
+        resp = requests.post(f"{BACKEND_URL}{endpoint}", json=payload)
+        return resp.json()
     except:
         st.error("API error")
         return None
@@ -197,12 +210,12 @@ def call_api(endpoint, payload):
 if st.button("Run Forecast"):
 
     if not tickers:
-        st.error("Select ticker")
+        st.error("Select at least one ticker")
         st.stop()
 
     check_limits(forecast_days)
 
-    data = call_api("/predict", {
+    data = call_api("/api/v1/predict", {
         "tickers": tickers,
         "days": forecast_days
     })
