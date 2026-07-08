@@ -416,22 +416,57 @@ def train_direction_threshold(
             len(X_val),
     }
 
-    model_out = Path(
-        model_out
+    from services.model_registry import (
+        ModelRegistry,
+        next_model_version,
     )
 
-    model_out.parent.mkdir(
-        parents=True,
-        exist_ok=True,
+    registry = ModelRegistry()
+
+    version, filename = next_model_version(
+        registry.models_dir,
+        "xgb_direction",
     )
+
+    model_out = registry.models_dir / filename
 
     joblib.dump(
         bundle,
         model_out,
     )
 
+    registry.register_model(
+        task="direction",
+        model_type="xgboost",
+        file=filename,
+        version=version,
+        metrics={
+            "accuracy": float(accuracy),
+            "precision": float(precision),
+            "recall": float(recall),
+            "f1": float(f1),
+            "auc": float(auc),
+            "top10": float(top10),
+            "top20": float(top20),
+            "top30": float(top30),
+        },
+        parameters={
+            "horizon": horizon,
+            "threshold": threshold,
+            "training_rows": len(X_train),
+            "validation_rows": len(X_val),
+        },
+        feature_names=list(X.columns),
+        make_production=True,
+        notes="Automatically registered by training_direction_threshold.",
+    )
+
     print(
-        f"\nModel saved to:\n{model_out}"
+        f"\nModel version {version} saved to:\n{model_out}"
+    )
+
+    print(
+        "\nDirection model registered as production."
     )
 
 
