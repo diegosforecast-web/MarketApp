@@ -25,6 +25,7 @@ class EnsembleDecision:
     reasons: list[str]
     warnings: list[str]
     explanation: dict | None = None
+    historical_confidence: dict | None = None
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

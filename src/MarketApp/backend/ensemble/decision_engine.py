@@ -5,7 +5,7 @@ Purpose
 -------
 Combine production model outputs into one clear decision.
 
-This first production-connected version loads both production models from the
+This production-connected version loads both production models from the
 Model Registry:
 - direction -> DirectionForecaster
 - return_forecast -> GBMForecaster
@@ -30,13 +30,13 @@ class EnsembleDecisionEngine:
         self.min_expected_return = min_expected_return
         self.high_confidence_threshold = high_confidence_threshold
 
-        registry = ModelRegistry()
+        self.registry = ModelRegistry()
 
-        self.direction_model = registry.load_predictor(
+        self.direction_model = self.registry.load_predictor(
             "direction"
         )
 
-        self.return_model = registry.load_predictor(
+        self.return_model = self.registry.load_predictor(
             "return_forecast"
         )
 
@@ -74,6 +74,7 @@ class EnsembleDecisionEngine:
             reasons=decision.reasons,
             warnings=decision.warnings,
             explanation=explanation.to_dict(),
+            historical_confidence=self._historical_confidence(),
         )
 
     def decide(
@@ -129,3 +130,31 @@ class EnsembleDecisionEngine:
             reasons=reasons,
             warnings=warnings,
         )
+
+    def _historical_confidence(self) -> dict:
+        info = self.registry.get_model_info(
+            "direction"
+        )
+
+        metrics = info.get(
+            "metrics",
+            {}
+        )
+
+        parameters = info.get(
+            "parameters",
+            {}
+        )
+
+        return {
+            "source": "production_direction_model_validation",
+            "model_version": info.get("version"),
+            "git_commit": info.get("git_commit"),
+            "accuracy": metrics.get("accuracy"),
+            "precision": metrics.get("precision"),
+            "recall": metrics.get("recall"),
+            "f1": metrics.get("f1"),
+            "auc": metrics.get("auc"),
+            "calibration_method": parameters.get("calibration_method"),
+            "validation_rows": parameters.get("validation_rows"),
+        }
