@@ -26,7 +26,7 @@ class MarketDataService:
         params = {
             "function": "TIME_SERIES_DAILY",
             "symbol": ticker.upper(),
-            "outputsize": "compact",      # <-- Changed from compact
+            "outputsize": "full",      # <-- Changed from compact
             "apikey": self.api_key,
         }
 
@@ -40,6 +40,31 @@ class MarketDataService:
         payload = response.json()
 
         if "Time Series (Daily)" not in payload:
+            fallback_path = "data/price_history.csv"
+
+            if os.path.exists(fallback_path):
+                df = pd.read_csv(fallback_path)
+                df.columns = df.columns.str.lower()
+                df["date"] = pd.to_datetime(df["date"])
+
+                numeric_cols = [
+                    "open",
+                    "high",
+                    "low",
+                    "close",
+                    "volume",
+                ]
+
+                df[numeric_cols] = df[numeric_cols].apply(
+                    pd.to_numeric,
+                    errors="coerce",
+                )
+
+                return (
+                    df.sort_values("date")
+                    .reset_index(drop=True)
+                )
+
             raise RuntimeError(
                 f"Unexpected Alpha Vantage response: {payload}"
             )
