@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Any
 
 from forecasters.gbm_forecaster import GBMForecaster
+from forecasters.direction_forecaster import DirectionForecaster
 
 
 DEFAULT_REGISTRY = {
@@ -170,6 +171,11 @@ class ModelRegistry:
 
         if model_type == "gbm":
             return GBMForecaster(
+                str(model_path),
+            )
+        
+        if model_type == "xgboost":
+            return DirectionForecaster(
                 str(model_path),
             )
 
