@@ -15,6 +15,12 @@ from sklearn.model_selection import train_test_split
 
 from features.engineered_features import build_14_feature_frame
 
+# NEW
+from services.model_registry import (
+    ModelRegistry,
+    next_model_version,
+)
+
 
 def load_price_data(csv_path: str) -> pd.DataFrame:
     """
@@ -88,13 +94,10 @@ def build_dataset(
         f"{feats.shape}"
     )
 
-    # -----------------------------------------
-    # PRICE TARGET
-    # -----------------------------------------
+    future_close = feats["close"].shift(-horizon)
 
-    feats["target"] = (
-        feats["close"]
-        .shift(-horizon)
+    feats["target"] = np.log(
+        future_close / feats["close"]
     )
 
     feats = (
@@ -195,36 +198,38 @@ def train_gbm(
     )
 
     pred = gbm.predict(X_val)
+# ==================================================
+# GBM METRICS
+# ==================================================
 
-    # ==================================================
-    # GBM METRICS
-    # ==================================================
+    current_close = X_val["close"].values
+
+    pred_price = current_close * np.exp(pred)
+    actual_price = current_close * np.exp(y_val.values)
 
     mae = mean_absolute_error(
-        y_val,
+        y_val.values,
         pred,
     )
 
     rmse = np.sqrt(
         mean_squared_error(
-            y_val,
+            y_val.values,
             pred,
         )
     )
 
     r2 = r2_score(
-        y_val,
+        y_val.values,
         pred,
     )
 
     actual_direction = np.sign(
         y_val.values
-        - X_val["close"].values
     )
 
     pred_direction = np.sign(
         pred
-        - X_val["close"].values
     )
 
     directional_accuracy = (
@@ -232,36 +237,33 @@ def train_gbm(
         == pred_direction
     ).mean() * 100
 
-    # ==================================================
-    # NAIVE BASELINE
-    # Tomorrow = Today
-    # ==================================================
+# ==================================================
+# NAIVE BASELINE
+# ==================================================
 
-    naive_pred = (
-        X_val["close"]
-        .values
+    naive_pred = np.zeros_like(
+        y_val.values
     )
 
     naive_mae = mean_absolute_error(
-        y_val,
+        y_val.values,
         naive_pred,
     )
 
     naive_rmse = np.sqrt(
         mean_squared_error(
-            y_val,
+            y_val.values,
             naive_pred,
         )
     )
 
     naive_r2 = r2_score(
-        y_val,
+        y_val.values,
         naive_pred,
     )
 
     naive_direction = np.sign(
         naive_pred
-        - X_val["close"].values
     )
 
     naive_directional_accuracy = (
@@ -274,9 +276,9 @@ def train_gbm(
         f"{directional_accuracy:.2f}%"
     )
 
-    # ==================================================
-    # FEATURE IMPORTANCE
-    # ==================================================
+# ==================================================
+# FEATURE IMPORTANCE
+# ==================================================
 
     importance = (
         pd.DataFrame(
@@ -299,15 +301,18 @@ def train_gbm(
         importance.head(15)
     )
 
-    # ==================================================
-    # VALIDATION SAMPLE
-    # ==================================================
+# ==================================================
+# VALIDATION SAMPLE
+# ==================================================
 
     results = pd.DataFrame(
         {
-            "Actual": y_val.values,
-            "Predicted": pred,
-            "Naive": naive_pred,
+            "Actual Return": y_val.values,
+            "Predicted Return": pred,
+            "Naive Return": naive_pred,
+            "Actual Price": actual_price,
+            "Predicted Price": pred_price,
+            "Current Close": current_close,
         }
     )
 
@@ -317,9 +322,9 @@ def train_gbm(
         results.head(20)
     )
 
-    # ==================================================
-    # METRICS
-    # ==================================================
+# ==================================================
+# METRICS
+# ==================================================
 
     print("\n==============================")
     print("GBM Metrics")
@@ -343,9 +348,9 @@ def train_gbm(
         f"{naive_directional_accuracy:.2f}%"
     )
 
-    # ==================================================
-    # SAVE MODEL
-    # ==================================================
+# ==================================================
+# SAVE MODEL
+# ==================================================
 
     bundle = {
         "model": gbm,
@@ -357,68 +362,94 @@ def train_gbm(
             importance.to_dict(
                 "records"
             ),
-
         "training_rows":
             len(X_train),
-
         "validation_rows":
             len(X_val),
-
         "total_rows":
             len(X),
-
         "mae":
             float(mae),
-
         "rmse":
             float(rmse),
-
         "r2":
             float(r2),
-
         "directional_accuracy":
             float(
                 directional_accuracy
             ),
-
         "naive_mae":
             float(naive_mae),
-
         "naive_rmse":
             float(naive_rmse),
-
         "naive_r2":
             float(naive_r2),
-
         "naive_directional_accuracy":
             float(
                 naive_directional_accuracy
             ),
     }
 
-    model_out = Path(
-        model_out
+    registry = ModelRegistry()
+
+    version, filename = next_model_version(
+        registry.models_dir,
+        "gbm_model",
     )
 
-    model_out.parent.mkdir(
+    model_path = (
+        registry.models_dir
+        / filename
+    )
+
+    model_path.parent.mkdir(
         parents=True,
         exist_ok=True,
     )
 
     joblib.dump(
         bundle,
-        model_out,
+        model_path,
+    )
+
+    registry.register_model(
+        task="return_forecast",
+        model_type="gbm",
+        file=filename,
+        version=version,
+        metrics={
+            "mae": float(mae),
+            "rmse": float(rmse),
+            "r2": float(r2),
+            "directional_accuracy": float(
+                directional_accuracy
+            ),
+        },
+        parameters={
+            "horizon": horizon,
+            "training_rows": len(X_train),
+            "validation_rows": len(X_val),
+        },
+        feature_names=list(
+            X.columns
+        ),
+        make_production=True,
+        notes="Automatically registered by training_gbm.",
     )
 
     print(
-        f"\nModel saved to:\n"
-        f"{model_out}"
+        f"\nModel version {version} saved:"
+    )
+
+    print(model_path)
+
+    print(
+        "\nRegistry updated successfully."
     )
 
     print(
         "\nGBM training completed successfully."
     )
-
 
 if __name__ == "__main__":
 
@@ -433,7 +464,11 @@ if __name__ == "__main__":
     parser.add_argument(
         "--out",
         default="models/gbm_model.pkl",
-        help="Output model path",
+        help=(
+            "Legacy output argument. "
+            "Models are automatically versioned "
+            "through the Model Registry."
+        ),
     )
 
     parser.add_argument(
