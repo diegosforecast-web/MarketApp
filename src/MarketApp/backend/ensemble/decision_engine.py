@@ -53,10 +53,27 @@ class EnsembleDecisionEngine:
             price_df
         )
 
-        return self.decide(
+        decision = self.decide(
             ticker=ticker,
             direction_probability=direction_probability,
             expected_return=expected_return,
+        )
+
+        explanation = self.direction_model.explain(
+            price_df=price_df,
+            prediction=decision.recommendation,
+            confidence=direction_probability,
+        )
+
+        return EnsembleDecision(
+            ticker=decision.ticker,
+            direction_probability=decision.direction_probability,
+            expected_return=decision.expected_return,
+            recommendation=decision.recommendation,
+            confidence=decision.confidence,
+            reasons=decision.reasons,
+            warnings=decision.warnings,
+            explanation=explanation.to_dict(),
         )
 
     def decide(

@@ -71,7 +71,28 @@ def print_decision(decision) -> None:
     else:
         print("- None")
 
+    if decision.explanation:
+        print("\nExplanation")
+        print("-----------")
+        print(decision.explanation.get("summary", "No explanation available."))
 
+        print("\nTop Positive Drivers")
+        print("--------------------")
+        for item in decision.explanation.get("top_positive_features", []):
+            print(
+                f"- {item.get('display_name')}: "
+                f"{item.get('direction')} "
+                f"(impact: {item.get('impact'):.4f})"
+            )
+
+        print("\nTop Negative Drivers")
+        print("--------------------")
+        for item in decision.explanation.get("top_negative_features", []):
+            print(
+                f"- {item.get('display_name')}: "
+                f"{item.get('direction')} "
+                f"(impact: {item.get('impact'):.4f})"
+            )
 def parse_args():
     parser = argparse.ArgumentParser()
 
@@ -102,4 +123,4 @@ if __name__ == "__main__":
         price_df=df,
     )
 
-    print_decision(decision)
+print_decision(decision)

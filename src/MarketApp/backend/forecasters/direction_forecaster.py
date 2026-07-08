@@ -2,6 +2,7 @@ import joblib
 import pandas as pd
 
 from features.engineered_features import latest_feature_vector
+from explainability.shap_engine import ShapEngine
 
 
 class DirectionForecaster:
@@ -50,3 +51,31 @@ class DirectionForecaster:
         probability = self.predict_proba(price_df)
 
         return int(probability >= 0.50)
+    
+    def latest_features(self, price_df: pd.DataFrame) -> pd.DataFrame:
+        x = latest_feature_vector(price_df)
+        if self.feature_names:
+            x = x[self.feature_names]
+
+        return pd.DataFrame(
+            [x.values],
+            columns=x.index,
+        )
+
+    def explain(
+        self,
+        price_df: pd.DataFrame,
+        prediction: str,
+        confidence: float,
+    ):
+        x = self.latest_features(price_df)
+
+        engine = ShapEngine(
+            self.model,
+        )
+
+        return engine.explain_prediction(
+            row=x,
+            prediction=prediction,
+            confidence=confidence,
+        )
