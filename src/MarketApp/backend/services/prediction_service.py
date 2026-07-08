@@ -1,8 +1,10 @@
 from ensemble.decision_engine import EnsembleDecisionEngine
-from services.market_data_service import MarketDataService
 
 from schemas.prediction import PredictionRequest
 from schemas.response import PredictionResponse
+
+from services.market_data_service import MarketDataService
+from services.prediction_history_service import PredictionHistoryService
 
 
 class PredictionService:
@@ -13,6 +15,7 @@ class PredictionService:
     def __init__(self):
         self.market_data = MarketDataService()
         self.ensemble = EnsembleDecisionEngine()
+        self.history = PredictionHistoryService()
 
     async def predict(
         self,
@@ -54,7 +57,7 @@ class PredictionService:
             )
         )
 
-        return PredictionResponse(
+        response = PredictionResponse(
             ticker=request.ticker.upper(),
             current_price=round(current_price, 2),
             forecast_price=round(forecast_price, 2),
@@ -70,3 +73,9 @@ class PredictionService:
             explanation=decision.explanation,
             historical_confidence=decision.historical_confidence,
         )
+
+        self.history.record(
+            response
+        )
+
+        return response
