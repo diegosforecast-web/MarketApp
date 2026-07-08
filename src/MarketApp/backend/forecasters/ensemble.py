@@ -2,11 +2,11 @@
 
 import pandas as pd
 
-from backend.forecasters.gru_forecaster import GRUForecaster
-from backend.forecasters.regime_forecaster import RegimeForecaster
-from backend.forecasters.gbm_forecaster import GBMForecaster
-from backend.forecasters.linear_forecaster import LinearForecaster
-from backend.models.confidence import ConfidenceModel
+from forecasters.gru_forecaster import GRUForecaster
+from forecasters.regime_forecaster import RegimeForecaster
+from forecasters.gbm_forecaster import GBMForecaster
+from forecasters.linear_forecaster import LinearForecaster
+from models.confidence import ConfidenceModel
 
 
 class EnsembleForecaster:

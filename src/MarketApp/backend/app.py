@@ -1,8 +1,10 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 import stripe
+import os
 
 from endpoints.compare_models import router as compare_models_router
+from endpoints.forecast import router as forecast_router
 
 # -----------------------------
 # STRIPE CONFIG
@@ -39,6 +41,11 @@ app.add_middleware(
 )
 
 app.include_router(compare_models_router, prefix="/api/v1")
+app.include_router(
+    forecast_router,
+    prefix="/forecast",
+    tags=["Forecast"],
+)
 
 # -----------------------------
 # BASIC ROUTES
@@ -103,3 +110,47 @@ def user_plan(email: str):
         "email": email,
         "plan": get_user_plan(email)
     }
+
+
+@app.get("/debug/models")
+def debug_models():
+    try:
+        return {
+            "models": os.listdir("/app/models"),
+            "models_to_deploy": os.listdir("/app/models_to_deploy"),
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/debug/env")
+def debug_env():
+    return {
+        "LSTM_MODEL_PATH": os.getenv("LSTM_MODEL_PATH"),
+        "GRU_MODEL_PATH": os.getenv("GRU_MODEL_PATH"),
+        "GBM_MODEL_PATH": os.getenv("GBM_MODEL_PATH"),
+        "ENSEMBLE_MODEL_PATH": os.getenv("ENSEMBLE_MODEL_PATH"),
+    }
+
+@app.get("/debug/packages")
+def debug_packages():
+    result = {}
+
+    try:
+        import tensorflow as tf
+        result["tensorflow"] = tf.__version__
+    except Exception as e:
+        result["tensorflow"] = str(e)
+
+    try:
+        import torch
+        result["torch"] = torch.__version__
+    except Exception as e:
+        result["torch"] = str(e)
+
+    try:
+        import sklearn
+        result["sklearn"] = sklearn.__version__
+    except Exception as e:
+        result["sklearn"] = str(e)
+
+    return result

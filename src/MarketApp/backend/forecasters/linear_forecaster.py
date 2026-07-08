@@ -2,7 +2,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from backend.features.engineered_features import latest_feature_vector
+from features.engineered_features import latest_feature_vector
 
 class LinearForecaster:
     def __init__(self, model_path: str):

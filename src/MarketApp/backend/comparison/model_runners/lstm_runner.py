@@ -80,7 +80,11 @@ def _load_from_path(path: str):
     if ext in (".h5", ".keras", "") or os.path.isdir(path):
         try:
             import tensorflow as tf  # type: ignore[import]
-            return tf.keras.models.load_model(path)
+            return tf.keras.models.load_model(
+                path,
+                compile=False
+            )
+
         except Exception as exc:  # noqa: BLE001
             raise RuntimeError(f"Failed to load LSTM with TF: {exc}") from exc
     raise ValueError(f"Unrecognised LSTM model format: {path}")

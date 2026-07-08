@@ -5,7 +5,6 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from sklearn.ensemble import GradientBoostingRegressor
 from sklearn.metrics import (
     mean_absolute_error,
     mean_squared_error,
@@ -13,14 +12,12 @@ from sklearn.metrics import (
 )
 from sklearn.model_selection import train_test_split
 
+from xgboost import XGBRegressor
+
 from features.engineered_features import build_14_feature_frame
 
 
 def load_price_data(csv_path: str) -> pd.DataFrame:
-    """
-    Load historical OHLCV data.
-    """
-
     csv_path = Path(csv_path)
 
     if not csv_path.exists():
@@ -69,13 +66,6 @@ def build_dataset(
     df: pd.DataFrame,
     horizon: int,
 ):
-    """
-    Build training dataset.
-
-    Target:
-        Future closing price
-    """
-
     feats = build_14_feature_frame(df)
 
     feats = (
@@ -88,10 +78,7 @@ def build_dataset(
         f"{feats.shape}"
     )
 
-    # -----------------------------------------
     # PRICE TARGET
-    # -----------------------------------------
-
     feats["target"] = (
         feats["close"]
         .shift(-horizon)
@@ -127,7 +114,7 @@ def build_dataset(
     return X, y
 
 
-def train_gbm(
+def train_xgb(
     csv_path: str,
     model_out: str,
     horizon: int,
@@ -154,11 +141,6 @@ def train_gbm(
         f"{len(X)}"
     )
 
-    if len(X) < 30:
-        raise ValueError(
-            f"Not enough samples after feature engineering ({len(X)})."
-        )
-
     X_train, X_val, y_train, y_val = (
         train_test_split(
             X,
@@ -179,25 +161,27 @@ def train_gbm(
         f"{len(X_val)}"
     )
 
-    gbm = GradientBoostingRegressor(
-        n_estimators=300,
-        learning_rate=0.05,
-        max_depth=4,
-        subsample=0.9,
+    model = XGBRegressor(
+        n_estimators=500,
+        max_depth=6,
+        learning_rate=0.03,
+        subsample=0.8,
+        colsample_bytree=0.8,
+        objective="reg:squarederror",
         random_state=42,
     )
 
-    print("\nTraining GBM...")
+    print("\nTraining XGBoost...")
 
-    gbm.fit(
+    model.fit(
         X_train,
         y_train,
     )
 
-    pred = gbm.predict(X_val)
+    pred = model.predict(X_val)
 
     # ==================================================
-    # GBM METRICS
+    # XGB METRICS
     # ==================================================
 
     mae = mean_absolute_error(
@@ -234,7 +218,6 @@ def train_gbm(
 
     # ==================================================
     # NAIVE BASELINE
-    # Tomorrow = Today
     # ==================================================
 
     naive_pred = (
@@ -259,21 +242,6 @@ def train_gbm(
         naive_pred,
     )
 
-    naive_direction = np.sign(
-        naive_pred
-        - X_val["close"].values
-    )
-
-    naive_directional_accuracy = (
-        actual_direction
-        == naive_direction
-    ).mean() * 100
-
-    print(
-        f"\nDirectional Accuracy: "
-        f"{directional_accuracy:.2f}%"
-    )
-
     # ==================================================
     # FEATURE IMPORTANCE
     # ==================================================
@@ -282,8 +250,7 @@ def train_gbm(
         pd.DataFrame(
             {
                 "Feature": X.columns,
-                "Importance":
-                    gbm.feature_importances_,
+                "Importance": model.feature_importances_,
             }
         )
         .sort_values(
@@ -296,12 +263,8 @@ def train_gbm(
     print("\nTop Feature Importances")
     print("-----------------------")
     print(
-        importance.head(15)
+        importance.head(20)
     )
-
-    # ==================================================
-    # VALIDATION SAMPLE
-    # ==================================================
 
     results = pd.DataFrame(
         {
@@ -317,12 +280,8 @@ def train_gbm(
         results.head(20)
     )
 
-    # ==================================================
-    # METRICS
-    # ==================================================
-
     print("\n==============================")
-    print("GBM Metrics")
+    print("XGBoost Metrics")
     print("==============================")
     print(f"MAE : {mae:.4f}")
     print(f"RMSE: {rmse:.4f}")
@@ -338,62 +297,31 @@ def train_gbm(
     print(f"MAE : {naive_mae:.4f}")
     print(f"RMSE: {naive_rmse:.4f}")
     print(f"R²  : {naive_r2:.4f}")
-    print(
-        f"Directional Accuracy: "
-        f"{naive_directional_accuracy:.2f}%"
-    )
-
-    # ==================================================
-    # SAVE MODEL
-    # ==================================================
 
     bundle = {
-        "model": gbm,
+        "model": model,
+        "model_type": "xgboost",
         "horizon": horizon,
-        "feature_names": list(
-            X.columns
+        "feature_names": list(X.columns),
+        "feature_importance": importance.to_dict("records"),
+        "training_rows": len(X_train),
+        "validation_rows": len(X_val),
+        "total_rows": len(X),
+        "mae": float(mae),
+        "rmse": float(rmse),
+        "r2": float(r2),
+        "directional_accuracy": float(
+            directional_accuracy
         ),
-        "feature_importance":
-            importance.to_dict(
-                "records"
-            ),
-
-        "training_rows":
-            len(X_train),
-
-        "validation_rows":
-            len(X_val),
-
-        "total_rows":
-            len(X),
-
-        "mae":
-            float(mae),
-
-        "rmse":
-            float(rmse),
-
-        "r2":
-            float(r2),
-
-        "directional_accuracy":
-            float(
-                directional_accuracy
-            ),
-
-        "naive_mae":
-            float(naive_mae),
-
-        "naive_rmse":
-            float(naive_rmse),
-
-        "naive_r2":
-            float(naive_r2),
-
-        "naive_directional_accuracy":
-            float(
-                naive_directional_accuracy
-            ),
+        "naive_mae": float(
+            naive_mae
+        ),
+        "naive_rmse": float(
+            naive_rmse
+        ),
+        "naive_r2": float(
+            naive_r2
+        ),
     }
 
     model_out = Path(
@@ -416,7 +344,7 @@ def train_gbm(
     )
 
     print(
-        "\nGBM training completed successfully."
+        "\nXGBoost training completed successfully."
     )
 
 
@@ -427,25 +355,22 @@ if __name__ == "__main__":
     parser.add_argument(
         "--csv",
         default="data/price_history.csv",
-        help="Historical price CSV",
     )
 
     parser.add_argument(
         "--out",
-        default="models/gbm_model.pkl",
-        help="Output model path",
+        default="models/xgb_model.pkl",
     )
 
     parser.add_argument(
         "--horizon",
         type=int,
         default=1,
-        help="Prediction horizon in trading days",
     )
 
     args = parser.parse_args()
 
-    train_gbm(
+    train_xgb(
         csv_path=args.csv,
         model_out=args.out,
         horizon=args.horizon,

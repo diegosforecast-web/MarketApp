@@ -2,7 +2,7 @@ import joblib
 import numpy as np
 import pandas as pd
 
-from backend.features.engineered_features import latest_feature_vector
+from features.engineered_features import latest_feature_vector
 
 class GBMForecaster:
     def __init__(self, model_path: str):
@@ -15,6 +15,6 @@ class GBMForecaster:
         price_df: recent OHLCV history, same schema as training.
         Returns predicted future close (horizon steps ahead).
         """
-        x = latest_feature_vector(price_df).reshape(1, -1)
+        x = latest_feature_vector(price_df).to_numpy().reshape(1, -1)
         y_pred = self.model.predict(x)[0]
         return float(y_pred)

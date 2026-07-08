@@ -230,9 +230,33 @@ def _load_from_path(path: str) -> Any:
             return booster
         except ImportError:
             raise RuntimeError("xgboost package required for .xgb/.json models.")
+    
     if ext in (".pkl", ".pickle"):
-        with open(path, "rb") as fh:
-            return pickle.load(fh)
+
+        import joblib
+
+        loaders = [
+            lambda: joblib.load(path),
+            lambda: pickle.load(open(path, "rb"))
+        ]
+
+        last_error = None
+
+        for loader in loaders:
+            try:
+                return loader()
+            except Exception as exc:
+                last_error = exc
+                logger.exception(
+                    "GBM load attempt failed: %s",
+                    exc
+                )
+
+        raise RuntimeError(
+            f"Unable to load GBM model: {last_error}"
+        )
+
+
     if ext == ".joblib":
         try:
             import joblib  # type: ignore[import]
