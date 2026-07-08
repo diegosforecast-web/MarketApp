@@ -20,6 +20,8 @@ from features.engineered_features import (
     build_14_feature_frame,
 )
 
+from evaluation.calibration import PlattCalibrator
+
 
 # ==========================================================
 # DATA LOADING
@@ -256,6 +258,11 @@ def train_direction_threshold(
         [:, 1]
     )
 
+    calibrator = PlattCalibrator().fit(
+        probabilities,
+        y_val,
+    )
+
     pred = (
         probabilities >= 0.50
     ).astype(int)
@@ -414,6 +421,8 @@ def train_direction_threshold(
             len(X_train),
         "validation_rows":
             len(X_val),
+        "calibration_method": "platt",
+        "calibrator": calibrator,
     }
 
     from services.model_registry import (
@@ -455,6 +464,7 @@ def train_direction_threshold(
             "threshold": threshold,
             "training_rows": len(X_train),
             "validation_rows": len(X_val),
+            "calibration_method": "platt",
         },
         feature_names=list(X.columns),
         make_production=True,

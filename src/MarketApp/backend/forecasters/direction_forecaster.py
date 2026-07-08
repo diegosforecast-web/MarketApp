@@ -12,10 +12,12 @@ class DirectionForecaster:
         self.horizon = bundle.get("horizon", 5)
         self.threshold = bundle.get("threshold", 0.02)
         self.feature_names = bundle.get("feature_names", [])
+        self.calibration_method = bundle.get("calibration_method")
+        self.calibrator = bundle.get("calibrator")
 
     def predict_proba(self, price_df: pd.DataFrame) -> float:
         """
-        Returns probability of BUY.
+        Returns calibrated probability of BUY when a calibrator is available.
 
         Example:
             0.73 = 73% probability that future return exceeds threshold.
@@ -25,11 +27,21 @@ class DirectionForecaster:
         if self.feature_names:
             x = x[self.feature_names]
 
-        x = x.to_numpy().reshape(1, -1)
+        x = pd.DataFrame(
+            [x.values],
+            columns=x.index,
+        )
 
-        probability = self.model.predict_proba(x)[0][1]
+        raw_probability = self.model.predict_proba(x)[0][1]
 
-        return float(probability)
+        if self.calibrator is not None:
+            calibrated = self.calibrator.predict(
+                [raw_probability]
+            )[0]
+
+            return float(calibrated)
+
+        return float(raw_probability)
 
     def predict(self, price_df: pd.DataFrame) -> int:
         """
