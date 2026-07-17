@@ -15,6 +15,10 @@ import json
 from unittest.mock import AsyncMock, patch
 
 import pytest
+
+pytestmark = pytest.mark.skip(
+    reason="Compare Models is deferred for v1.0.0"
+)
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 

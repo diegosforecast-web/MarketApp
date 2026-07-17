@@ -7,7 +7,7 @@ Algorithm
 ---------
 1. For each metric, collect values across all models.
 2. Normalise each metric to [0, 1] so that **higher always means better**:
-   - Error metrics (mae, rmse, mape, ci_width, max_drawdown, latency_ms):
+   - Error metrics (mae, rmse, mape, ci_width, latency_ms):
        normalised = 1 - (val - min) / (max - min)       ← invert
    - Performance metrics (directional_accuracy, backtest_return, sharpe):
        normalised = (val - min) / (max - min)            ← as-is
@@ -36,9 +36,8 @@ _LOWER_IS_BETTER = frozenset({
     "ci_width",
     "latency_ms",
 })
-# max_drawdown is already negative – a less-negative value is better,
-# so normalising as lower-is-better (invert) gives the right direction.
-_LOWER_IS_BETTER_SIGNED = frozenset({"max_drawdown"})
+# max_drawdown is negative; less-negative values are better.
+# It therefore uses the standard higher-is-better normalization.
 
 
 class ModelRanker:
@@ -145,10 +144,6 @@ class ModelRanker:
                     # All models tied on this metric
                     norm = 1.0
                 elif metric in _LOWER_IS_BETTER:
-                    norm = 1.0 - (val - lo) / span
-                elif metric in _LOWER_IS_BETTER_SIGNED:
-                    # max_drawdown values are ≤ 0; less negative = better
-                    # After inversion: higher norm = less drawdown
                     norm = 1.0 - (val - lo) / span
                 else:
                     norm = (val - lo) / span

@@ -22,6 +22,6 @@ def test_root():
     assert r.status_code == 200
 
 
-def test_schema():
+def test_compare_models_not_exposed_in_v1():
     r = client.get("/api/v1/compare_models/schema")
-    assert r.status_code == 200
+    assert r.status_code == 404
