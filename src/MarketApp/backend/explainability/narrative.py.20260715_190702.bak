@@ -1,0 +1,57 @@
+"""
+Narrative builder for model explanations.
+
+Purpose
+-------
+Turn feature contributions into concise user-facing language.
+
+Why it matters
+--------------
+Trust improves when users understand the main forces behind a prediction.
+"""
+
+from __future__ import annotations
+
+from explainability.models import FeatureContribution
+
+
+class NarrativeBuilder:
+    @staticmethod
+    def build_summary(
+        prediction: str,
+        positive_features: list[FeatureContribution],
+        negative_features: list[FeatureContribution],
+    ) -> str:
+        parts = []
+
+        if positive_features:
+            parts.append(
+                "The strongest supportive driver is "
+                f"{positive_features[0].display_name}."
+            )
+
+        if negative_features:
+            parts.append(
+                "The main opposing risk is "
+                f"{negative_features[0].display_name}."
+            )
+
+        if not parts:
+            return (
+                "The model did not identify a dominant explanatory driver "
+                "for this prediction."
+            )
+
+        return " ".join(parts)
+
+    @staticmethod
+    def direction_label(
+        impact: float,
+    ) -> str:
+        if impact > 0:
+            return "supportive"
+
+        if impact < 0:
+            return "opposing"
+
+        return "neutral"

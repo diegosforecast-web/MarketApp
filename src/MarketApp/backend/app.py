@@ -1,49 +1,73 @@
+import logging
 import os
 
 import stripe
-from fastapi import FastAPI, Request
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
+from endpoints.billing import router as billing_router
+from endpoints.community import router as community_router
+from endpoints.entitlements import router as entitlements_router
 from endpoints.forecast import router as forecast_router
+from endpoints.history import router as history_router
+from endpoints.portfolio import router as portfolio_router
+from endpoints.watchlist import router as watchlist_router
+from middleware.request_logging import RequestLoggingMiddleware
+from services.billing_service import BillingService
+from services.logging_config import configure_logging
+from services.monitoring_service import monitoring_service
+from services.supabase_service import SupabaseService
 
 
-stripe.api_key = os.getenv("STRIPE_SECRET_KEY")
-WEBHOOK_SECRET = os.getenv(
-    "STRIPE_WEBHOOK_SECRET",
-    "whsec_LbnUDCYZZZOJOauIufJgrxiHSUPmdS6z",
-)
+load_dotenv()
+configure_logging()
 
+logger = logging.getLogger("dimarket.app")
 
-USER_PLANS = {}
+APP_VERSION = os.getenv("APP_VERSION", "1.0.0")
+ENVIRONMENT = os.getenv("ENVIRONMENT", "development")
 
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 
-def save_user_plan(
-    email: str,
-    plan: str,
-) -> None:
-    USER_PLANS[email] = plan
+if not STRIPE_SECRET_KEY:
+    raise RuntimeError("STRIPE_SECRET_KEY is not configured.")
 
-
-def get_user_plan(
-    email: str,
-) -> str:
-    return USER_PLANS.get(
-        email,
-        "free",
+if not WEBHOOK_SECRET:
+    raise RuntimeError(
+        "STRIPE_WEBHOOK_SECRET is not configured."
     )
 
+stripe.api_key = STRIPE_SECRET_KEY
+
+cors_origins = [
+    origin.strip()
+    for origin in os.getenv(
+        "CORS_ORIGINS",
+        "http://127.0.0.1:5173,http://localhost:5173,http://127.0.0.1:4173,http://localhost:4173",
+    ).split(",")
+    if origin.strip()
+]
+
+supabase_service = SupabaseService()
+billing_service = BillingService()
 
 app = FastAPI(
     title="DiMarket Backend",
-    version="1.0.0",
+    version=APP_VERSION,
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+)
+
+app.add_middleware(
+    RequestLoggingMiddleware,
 )
 
 app.include_router(
@@ -52,12 +76,62 @@ app.include_router(
     tags=["Forecast"],
 )
 
+app.include_router(
+    history_router,
+    prefix="/history",
+    tags=["History"],
+)
+
+app.include_router(
+    entitlements_router,
+    prefix="/entitlements",
+    tags=["Entitlements"],
+)
+
+app.include_router(
+    portfolio_router,
+    prefix="/portfolio",
+    tags=["Portfolio"],
+)
+
+app.include_router(
+    watchlist_router,
+    prefix="/watchlist",
+    tags=["Watchlist"],
+)
+
+app.include_router(
+    billing_router,
+    prefix="/billing",
+    tags=["Billing"],
+)
+
+app.include_router(
+    community_router,
+    prefix="/community",
+    tags=["Community"],
+)
+
+@app.on_event("startup")
+def application_startup() -> None:
+    logger.info(
+        "application_started environment=%s version=%s",
+        ENVIRONMENT,
+        APP_VERSION,
+    )
+
+
+@app.on_event("shutdown")
+def application_shutdown() -> None:
+    logger.info("application_stopped")
+
 
 @app.get("/")
 def root():
     return {
         "service": "DiMarket Backend",
         "status": "running",
+        "version": APP_VERSION,
     }
 
 
@@ -65,7 +139,24 @@ def root():
 def health():
     return {
         "status": "ok",
+        "service": "DiMarket Backend",
+        "version": APP_VERSION,
+        "environment": ENVIRONMENT,
     }
+
+
+@app.get("/metrics", include_in_schema=False)
+def metrics():
+    if ENVIRONMENT.lower() == "production":
+        raise HTTPException(
+            status_code=404,
+            detail="Not found.",
+        )
+
+    return monitoring_service.snapshot(
+        version=APP_VERSION,
+        environment=ENVIRONMENT,
+    )
 
 
 @app.post("/stripe-webhook")
@@ -73,55 +164,101 @@ async def stripe_webhook(
     request: Request,
 ):
     payload = await request.body()
-    sig_header = request.headers.get(
+    signature = request.headers.get(
         "stripe-signature"
     )
+
+    if not signature:
+        raise HTTPException(
+            status_code=400,
+            detail="Stripe-Signature header is missing.",
+        )
 
     try:
         event = stripe.Webhook.construct_event(
             payload,
-            sig_header,
+            signature,
             WEBHOOK_SECRET,
         )
-    except Exception as exc:
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook payload.",
+        ) from exc
+
+    except stripe.error.SignatureVerificationError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid webhook signature.",
+        ) from exc
+
+    event_id = event["id"]
+    event_type = event["type"]
+
+    if supabase_service.is_stripe_event_processed(
+        event_id
+    ):
+        logger.info(
+            "stripe_webhook_duplicate event_id=%s event_type=%s",
+            event_id,
+            event_type,
+        )
+
         return {
-            "error": str(exc),
+            "received": True,
+            "duplicate": True,
         }
 
-    if event["type"] == "checkout.session.completed":
-        session = event["data"]["object"]
+    stripe_object = event["data"]["object"]
 
-        email = session["customer_details"]["email"]
-        amount = session["amount_total"]
+    try:
+        if event_type == "checkout.session.completed":
+            billing_service.handle_checkout_completed(
+                stripe_object
+            )
 
-        if amount == 999:
-            plan = "standard"
-        elif amount == 1700:
-            plan = "premium"
-        elif amount == 4999:
-            plan = "gold"
-        else:
-            plan = "free"
+        elif event_type in {
+            "customer.subscription.created",
+            "customer.subscription.updated",
+            "customer.subscription.deleted",
+        }:
+            billing_service.handle_subscription_event(
+                stripe_object
+            )
 
-        save_user_plan(
-            email,
-            plan,
+        elif event_type in {
+            "invoice.payment_succeeded",
+            "invoice.payment_failed",
+        }:
+            billing_service.handle_invoice_event(
+                stripe_object
+            )
+
+        supabase_service.record_stripe_event(
+            event_id=event_id,
+            event_type=event_type,
         )
 
-        print(
-            f"User upgraded: {email} -> {plan}"
+        logger.info(
+            "stripe_webhook_processed event_id=%s event_type=%s",
+            event_id,
+            event_type,
         )
 
-    return {
-        "status": "success",
-    }
+    except Exception as exc:
+        logger.exception(
+            "stripe_webhook_failed event_id=%s event_type=%s",
+            event_id,
+            event_type,
+        )
 
+        raise HTTPException(
+            status_code=500,
+            detail="Webhook processing failed.",
+        ) from exc
 
-@app.get("/user-plan")
-def user_plan(
-    email: str,
-):
     return {
-        "email": email,
-        "plan": get_user_plan(email),
+        "received": True,
+        "event_type": event_type,
     }

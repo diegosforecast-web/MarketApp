@@ -1,0 +1,2 @@
+run_id,created_at,name,model_name,dataset,horizon,threshold,git_commit,notes,metric_accuracy
+61b74997-4afa-4a29-a4df-c2df706c8e80,2026-07-08T02:22:16.147373+00:00,test-run,xgb,price_history.csv,,,8bd5d403,,0.56

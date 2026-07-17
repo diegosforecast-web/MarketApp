@@ -544,3 +544,236 @@ Continue from Sprint 3.2 and begin by implementing:
 - backtesting/walk_forward_direction_threshold.py
 
 These are the next approved engineering tasks.
+
+---
+
+# SESSION UPDATE 2026-07-08
+
+## Current Development Stage
+
+DiMarket has moved beyond basic prediction pipeline construction.
+
+The project is now in the trust, validation, explainability, and MLOps phase.
+
+The guiding principle remains unchanged:
+
+Build the most trustworthy AI forecasting platform that an individual investor can access.
+
+## Current Production Candidate
+
+The threshold-direction XGBoost classifier is the current primary production candidate.
+
+It uses threshold labels:
+
+BUY:
+future_return > +2%
+
+SELL:
+future_return < -2%
+
+IGNORE:
+-2% <= future_return <= +2%
+
+The model is evaluated using walk-forward validation and portfolio simulation rather than random train/test splits.
+
+Current trusted results:
+- Average walk-forward accuracy: 56.75%
+- Average precision: 66.66%
+- Average recall: 60.89%
+- Average F1: 62.01%
+- Top 10% signal win rate: 77.5%
+- Top 20% signal win rate: 71.25%
+- Best confidence threshold: 0.55
+- Profit Factor: approximately 1.93
+- Sharpe Ratio: approximately 3.87
+- Sortino Ratio: approximately 9.15
+
+Important:
+The model's value is not pure accuracy. Its value is ranking, confidence filtering, explainability, and trade-selection quality.
+
+## Calibration Decision
+
+Raw model probabilities are not reliable enough by themselves.
+
+Calibration testing showed:
+- Raw ECE: approximately 0.211
+- Platt Scaling ECE: approximately 0.051
+- Isotonic ECE: approximately 0.086
+
+Decision:
+Use Platt Scaling as the default probability calibration method for the threshold-direction model.
+
+DiMarket should never fake certainty. If confidence is weak or poorly calibrated, the product should say so.
+
+## Explainability Decision
+
+Explainability is now a core product requirement, not an optional feature.
+
+New explainability package:
+- explainability/models.py
+- explainability/feature_dictionary.py
+- explainability/narrative.py
+- explainability/explanation.py
+- explainability/reporting.py
+- explainability/shap_engine.py
+
+The current implementation uses native XGBoost feature contribution output instead of shap.TreeExplainer because it is more stable with the current XGBoost version.
+
+Goal:
+Every prediction should eventually answer:
+- What is the prediction?
+- What is the confidence?
+- Which features supported the prediction?
+- Which features opposed it?
+- What is the human-readable explanation?
+- Is the probability historically reliable?
+
+## Experiment Tracking Decision
+
+Experiment tracking is now part of the backend foundation.
+
+New package:
+- experiments/
+
+Tracked fields include:
+- run id
+- timestamp
+- model name
+- dataset
+- horizon
+- threshold
+- Git commit
+- parameters
+- metrics
+- notes
+
+Generated files:
+- reports/experiments.jsonl
+- reports/experiment_summary.csv
+
+Purpose:
+Do not rely on terminal logs. Every important training or backtest run should be reproducible and comparable.
+
+## Model Registry Decision
+
+A model registry has been introduced.
+
+Registry file:
+- models/registry.json
+
+Current tasks:
+- direction
+- return_forecast
+
+Task definitions:
+- direction: primary directional trading signal
+- return_forecast: supporting expected-return estimate
+
+Important:
+The direction task should be owned by the threshold-direction XGBoost classifier.
+The return_forecast task can be owned by the GBM log-return regressor.
+
+## GBM Return Forecast Decision
+
+GBM was changed from predicting absolute future close price to predicting log return:
+
+target = log(future_close / current_close)
+
+This is the correct target for return forecasting.
+
+However, current GBM return metrics are not production-worthy:
+- R²: approximately -0.1676
+- Directional Accuracy: approximately 49.23%
+- Worse than zero-return naive baseline
+
+Decision:
+GBM return forecast remains a research/supporting model only.
+Do not use it as the primary trading recommendation engine.
+
+## Current Backend Architecture Direction
+
+Primary decision flow:
+
+Historical Data
+↓
+Feature Engineering
+↓
+Threshold-Direction XGBoost
+↓
+Probability Calibration
+↓
+Confidence Filter
+↓
+SHAP-style Explanation
+↓
+Portfolio/Decision Report
+↓
+API Response
+↓
+Frontend Prediction Card
+
+Supporting flow:
+
+Historical Data
+↓
+Feature Engineering
+↓
+GBM Return Forecast
+↓
+Expected Return Estimate
+↓
+Decision Context
+
+## Immediate Next Approved Tasks
+
+1. Register threshold-direction XGBoost as the production direction model.
+
+2. Save direction model artifacts with versioned filenames:
+   - xgb_direction_v001.pkl
+   - xgb_direction_v002.pkl
+
+3. Store direction model metadata:
+   - horizon
+   - threshold target
+   - feature list
+   - walk-forward metrics
+   - calibration method
+   - selected confidence threshold
+   - Git commit
+
+4. Add model lifecycle commands:
+   - list model versions
+   - inspect current production model
+   - promote model version
+   - rollback production model
+
+5. Continue improving confidence and explainability before UI polish.
+
+## Do Not Do
+
+Do not redesign the architecture.
+
+Do not replace the existing feature pipeline.
+
+Do not make the GBM return regressor the main production signal unless it beats the naive baseline and the threshold-direction model.
+
+Do not optimize for flashy predictions over trust.
+
+Do not add unnecessary features outside the roadmap.
+
+## Current North Star
+
+DiMarket should become a trustworthy AI decision-support platform for individual investors.
+
+The product should prefer:
+- transparent uncertainty
+- calibrated confidence
+- explainable predictions
+- reproducible model history
+- validated trading behavior
+
+over:
+- inflated accuracy claims
+- black-box predictions
+- unvalidated model outputs
+- marketing-driven certainty
