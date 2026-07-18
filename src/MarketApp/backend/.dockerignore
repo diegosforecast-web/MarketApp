@@ -24,7 +24,28 @@ Thumbs.db
 # Ignore frontend
 ../frontend/
 
-# Ignore large model training artifacts
+# Ignore model and training artifacts by default
 *.pt
-*.pkl
+**/*.pkl
 *.csv
+
+# Include only the models required by the v1.0.0 registry
+!models/gbm_model_v004.pkl
+!models/gbm_return_h1_v001.pkl
+!models/gbm_return_h2_v001.pkl
+!models/gbm_return_h3_v001.pkl
+!models/gbm_return_h5_v001.pkl
+!models/gbm_return_h10_v001.pkl
+!models/gbm_return_h15_v001.pkl
+!models/gbm_return_h20_v001.pkl
+!models/xgb_direction_v001.pkl
+!models/xgb_direction_v002.pkl
+!models/xgb_direction_h1_v001.pkl
+!models/xgb_direction_h2_v001.pkl
+!models/xgb_direction_h3_v001.pkl
+!models/xgb_direction_h5_v001.pkl
+!models/xgb_direction_h10_v001.pkl
+!models/xgb_direction_h15_v001.pkl
+!models/xgb_direction_h20_v001.pkl
+!models/xgb_direction_h30_v001.pkl
+!models/xgb_direction_h90_v001.pkl
