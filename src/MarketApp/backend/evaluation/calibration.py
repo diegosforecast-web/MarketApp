@@ -31,6 +31,7 @@ import pandas as pd
 from sklearn.isotonic import IsotonicRegression
 from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import brier_score_loss
+from pathlib import Path
 
 
 @dataclass(frozen=True)
@@ -288,6 +289,57 @@ class CalibrationAnalyzer:
             bin_count=self.n_bins,
             reliability_table=table,
         )
+
+
+def plot_reliability_diagram(
+    metrics: CalibrationMetrics,
+    output_path: str | Path = "reports/reliability_diagram.png",
+) -> Path:
+    """
+    Save a reliability diagram using an existing CalibrationMetrics object.
+    """
+
+    import matplotlib.pyplot as plt
+
+    output_path = Path(output_path)
+
+    output_path.parent.mkdir(
+        parents=True,
+        exist_ok=True,
+    )
+
+    table = metrics.reliability_table.copy()
+    table = table[table["count"] > 0]
+
+    fig, ax = plt.subplots(figsize=(7, 7))
+
+    ax.plot(
+        [0, 1],
+        [0, 1],
+        linestyle="--",
+        label="Perfect calibration",
+    )
+
+    ax.plot(
+        table["avg_confidence"],
+        table["empirical_accuracy"],
+        marker="o",
+        label="Model calibration",
+    )
+
+    ax.set_title("Reliability Diagram")
+    ax.set_xlabel("Average Predicted Confidence")
+    ax.set_ylabel("Empirical Accuracy")
+    ax.set_xlim(0, 1)
+    ax.set_ylim(0, 1)
+    ax.grid(True)
+    ax.legend()
+
+    fig.tight_layout()
+    fig.savefig(output_path, dpi=150)
+    plt.close(fig)
+
+    return output_path
 
 
 class PlattCalibrator:

@@ -1,0 +1,371 @@
+from __future__ import annotations
+
+from calendar import monthrange
+from dataclasses import dataclass
+from datetime import datetime, timezone
+from typing import Any
+
+from services.supabase_service import SupabaseService
+
+
+PLAN_FREE = "free"
+PLAN_STANDARD = "standard"
+PLAN_PREMIUM = "premium"
+PLAN_GOLD = "gold"
+
+FREE_TOTAL_LIMIT = 3
+STANDARD_UNLIMITED_HORIZON = 3
+STANDARD_MONTHLY_5_DAY_CREDITS = 3
+PREMIUM_UNLIMITED_HORIZON = 5
+PREMIUM_MONTHLY_30_DAY_CREDITS = 3
+
+
+@dataclass(frozen=True)
+class EntitlementDecision:
+    allowed: bool
+    reason: str | None
+    entitlement_type: str
+
+
+class EntitlementError(ValueError):
+    def __init__(
+        self,
+        message: str,
+        *,
+        entitlements: dict[str, Any],
+    ) -> None:
+        super().__init__(message)
+        self.entitlements = entitlements
+
+
+class EntitlementService:
+    """
+    Central source of truth for DiMarket plan access.
+
+    Current product rules:
+    - Explorer: 3 lifetime complimentary forecasts, horizons 1-3.
+    - Standard: unlimited horizons 1-3, plus 3 five-day credits per period.
+    - Premium: unlimited horizons 1-5, plus 3 thirty-day credits per period.
+    - Gold: unlimited access to every production-supported horizon.
+
+    Paid credit periods use Stripe's current_period_start/current_period_end
+    when available. Existing profiles fall back to the current UTC month.
+    """
+
+    def __init__(self) -> None:
+        self.supabase = SupabaseService()
+
+    @staticmethod
+    def _normalize_plan(value: str | None) -> str:
+        normalized = str(value or PLAN_FREE).strip().lower()
+
+        if normalized not in {
+            PLAN_FREE,
+            PLAN_STANDARD,
+            PLAN_PREMIUM,
+            PLAN_GOLD,
+        }:
+            return PLAN_FREE
+
+        return normalized
+
+    @staticmethod
+    def _parse_datetime(value: Any) -> datetime | None:
+        if not value:
+            return None
+
+        parsed = datetime.fromisoformat(
+            str(value).replace("Z", "+00:00")
+        )
+
+        if parsed.tzinfo is None:
+            parsed = parsed.replace(tzinfo=timezone.utc)
+
+        return parsed.astimezone(timezone.utc)
+
+    @staticmethod
+    def _calendar_month_window() -> tuple[datetime, datetime]:
+        now = datetime.now(timezone.utc)
+        start = datetime(
+            now.year,
+            now.month,
+            1,
+            tzinfo=timezone.utc,
+        )
+
+        if now.month == 12:
+            end = datetime(
+                now.year + 1,
+                1,
+                1,
+                tzinfo=timezone.utc,
+            )
+        else:
+            end = datetime(
+                now.year,
+                now.month + 1,
+                1,
+                tzinfo=timezone.utc,
+            )
+
+        return start, end
+
+    def _period_window(
+        self,
+        profile: dict[str, Any],
+    ) -> tuple[datetime, datetime]:
+        start = self._parse_datetime(
+            profile.get("current_period_start")
+        )
+        end = self._parse_datetime(
+            profile.get("current_period_end")
+        )
+
+        if start and end and start < end:
+            return start, end
+
+        return self._calendar_month_window()
+
+    def _profile_for_user(
+        self,
+        user_id: str,
+    ) -> dict[str, Any]:
+        profile = self.supabase.get_profile(user_id)
+
+        if profile:
+            return profile
+
+        return {
+            "id": user_id,
+            "plan": PLAN_FREE,
+            "subscription_status": "free",
+            "current_period_start": None,
+            "current_period_end": None,
+        }
+
+    def get_entitlements(
+        self,
+        *,
+        user_id: str,
+        supported_horizons: list[int],
+    ) -> dict[str, Any]:
+        profile = self._profile_for_user(user_id)
+        plan = self._normalize_plan(profile.get("plan"))
+        supported = sorted({int(value) for value in supported_horizons})
+
+        period_start, period_end = self._period_window(profile)
+
+        total_usage = self.supabase.count_usage(
+            user_id=user_id,
+        )
+
+        five_day_usage = self.supabase.count_usage(
+            user_id=user_id,
+            horizon=5,
+            created_at_gte=period_start,
+            created_at_lt=period_end,
+        )
+
+        thirty_day_usage = self.supabase.count_usage(
+            user_id=user_id,
+            horizon=30,
+            created_at_gte=period_start,
+            created_at_lt=period_end,
+        )
+
+        if plan == PLAN_FREE:
+            base_limit: int | None = FREE_TOTAL_LIMIT
+            base_used = total_usage
+            base_remaining: int | None = max(
+                0,
+                FREE_TOTAL_LIMIT - total_usage,
+            )
+            unlimited_horizon = 0
+            allowed_base_horizons = [
+                horizon
+                for horizon in supported
+                if horizon <= 3
+            ]
+        elif plan == PLAN_STANDARD:
+            base_limit = None
+            base_used = total_usage
+            base_remaining = None
+            unlimited_horizon = STANDARD_UNLIMITED_HORIZON
+            allowed_base_horizons = [
+                horizon
+                for horizon in supported
+                if horizon <= STANDARD_UNLIMITED_HORIZON
+            ]
+        elif plan == PLAN_PREMIUM:
+            base_limit = None
+            base_used = total_usage
+            base_remaining = None
+            unlimited_horizon = PREMIUM_UNLIMITED_HORIZON
+            allowed_base_horizons = [
+                horizon
+                for horizon in supported
+                if horizon <= PREMIUM_UNLIMITED_HORIZON
+            ]
+        else:
+            base_limit = None
+            base_used = total_usage
+            base_remaining = None
+            unlimited_horizon = max(supported, default=0)
+            allowed_base_horizons = supported
+
+        special_credits: list[dict[str, Any]] = []
+
+        if plan == PLAN_STANDARD:
+            special_credits.append(
+                {
+                    "horizon": 5,
+                    "limit": STANDARD_MONTHLY_5_DAY_CREDITS,
+                    "used": five_day_usage,
+                    "remaining": max(
+                        0,
+                        STANDARD_MONTHLY_5_DAY_CREDITS
+                        - five_day_usage,
+                    ),
+                    "available_in_production": 5 in supported,
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                }
+            )
+
+        if plan == PLAN_PREMIUM:
+            special_credits.append(
+                {
+                    "horizon": 30,
+                    "limit": PREMIUM_MONTHLY_30_DAY_CREDITS,
+                    "used": thirty_day_usage,
+                    "remaining": max(
+                        0,
+                        PREMIUM_MONTHLY_30_DAY_CREDITS
+                        - thirty_day_usage,
+                    ),
+                    "available_in_production": 30 in supported,
+                    "period_start": period_start.isoformat(),
+                    "period_end": period_end.isoformat(),
+                }
+            )
+
+        return {
+            "plan": plan,
+            "subscription_status": (
+                profile.get("subscription_status") or plan
+            ),
+            "supported_horizons": supported,
+            "unlimited_horizon": unlimited_horizon,
+            "allowed_base_horizons": allowed_base_horizons,
+            "forecast_limit": base_limit,
+            "forecasts_used": base_used,
+            "forecasts_remaining": base_remaining,
+            "special_credits": special_credits,
+            "period_start": period_start.isoformat(),
+            "period_end": period_end.isoformat(),
+        }
+
+    def authorize(
+        self,
+        *,
+        user_id: str,
+        requested_horizon: int,
+        supported_horizons: list[int],
+    ) -> dict[str, Any]:
+        horizon = int(requested_horizon)
+
+        entitlements = self.get_entitlements(
+            user_id=user_id,
+            supported_horizons=supported_horizons,
+        )
+
+        plan = entitlements["plan"]
+        supported = entitlements["supported_horizons"]
+
+        if horizon not in supported:
+            raise EntitlementError(
+                f"The {horizon}-day production model is not available yet. "
+                f"Available horizons: {supported}.",
+                entitlements=entitlements,
+            )
+
+        if plan == PLAN_GOLD:
+            return entitlements
+
+        if plan == PLAN_FREE:
+            if horizon > 3:
+                raise EntitlementError(
+                    "Explorer access supports horizons from 1 to 3 days.",
+                    entitlements=entitlements,
+                )
+
+            if entitlements["forecasts_remaining"] <= 0:
+                raise EntitlementError(
+                    "Your 3 complimentary forecasts have been used. "
+                    "Continue your DiMarket journey to run more forecasts.",
+                    entitlements=entitlements,
+                )
+
+            return entitlements
+
+        if plan == PLAN_STANDARD:
+            if horizon <= STANDARD_UNLIMITED_HORIZON:
+                return entitlements
+
+            if horizon == 5:
+                credit = entitlements["special_credits"][0]
+
+                if not credit["available_in_production"]:
+                    raise EntitlementError(
+                        "The 5-day production model is not available yet.",
+                        entitlements=entitlements,
+                    )
+
+                if credit["remaining"] <= 0:
+                    raise EntitlementError(
+                        "Your 3 Standard five-day forecast credits "
+                        "for this period have been used.",
+                        entitlements=entitlements,
+                    )
+
+                return entitlements
+
+            raise EntitlementError(
+                "Standard includes unlimited 1-3 day forecasts and "
+                "three 5-day credits per period.",
+                entitlements=entitlements,
+            )
+
+        if plan == PLAN_PREMIUM:
+            if horizon <= PREMIUM_UNLIMITED_HORIZON:
+                return entitlements
+
+            if horizon == 30:
+                credit = entitlements["special_credits"][0]
+
+                if not credit["available_in_production"]:
+                    raise EntitlementError(
+                        "Your Premium plan includes 30-day credits, but "
+                        "the 30-day production model has not been released yet.",
+                        entitlements=entitlements,
+                    )
+
+                if credit["remaining"] <= 0:
+                    raise EntitlementError(
+                        "Your 3 Premium thirty-day forecast credits "
+                        "for this period have been used.",
+                        entitlements=entitlements,
+                    )
+
+                return entitlements
+
+            raise EntitlementError(
+                "Premium includes unlimited 1-5 day forecasts and "
+                "three 30-day credits per period.",
+                entitlements=entitlements,
+            )
+
+        raise EntitlementError(
+            "This plan cannot access the requested forecast.",
+            entitlements=entitlements,
+        )

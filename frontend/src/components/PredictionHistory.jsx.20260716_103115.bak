@@ -1,0 +1,1388 @@
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import {
+  BadgeCheck,
+  BarChart3,
+  CalendarClock,
+  CheckCircle2,
+  ChevronDown,
+  ChevronUp,
+  CircleAlert,
+  Clock3,
+  Eye,
+  EyeOff,
+  History,
+  LoaderCircle,
+  Radar,
+  RefreshCw,
+  Route,
+  ShieldCheck,
+  Target,
+  Trash2,
+  TrendingDown,
+  TrendingUp,
+  XCircle,
+} from 'lucide-react'
+
+import { supabase } from '../lib/supabase'
+import ForecastTrajectory from './ForecastTrajectory'
+import './Sprint6Transparency.css'
+
+const API_URL =
+  import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
+
+function formatDate(value, includeTime = true) {
+  if (!value) return '—'
+
+  const date = new Date(
+    String(value).includes('T') ? value : `${value}T12:00:00`,
+  )
+
+  if (Number.isNaN(date.getTime())) return '—'
+
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    ...(includeTime ? { timeStyle: 'short' } : {}),
+  }).format(date)
+}
+
+function formatTime(value) {
+  if (!value) return '—'
+
+  const date = new Date(value)
+
+  if (Number.isNaN(date.getTime())) return '—'
+
+  return new Intl.DateTimeFormat('en-US', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(date)
+}
+
+function formatMoney(value) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(Number(value))
+  ) {
+    return '—'
+  }
+
+  return new Intl.NumberFormat('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    maximumFractionDigits: 2,
+  }).format(Number(value))
+}
+
+function formatPercent(value, signed = true, digits = 2) {
+  if (
+    value === null ||
+    value === undefined ||
+    Number.isNaN(Number(value))
+  ) {
+    return '—'
+  }
+
+  const numeric = Number(value)
+
+  return `${signed && numeric >= 0 ? '+' : ''}${numeric.toFixed(
+    digits,
+  )}%`
+}
+
+function tone(value) {
+  const normalized = String(value || '').toUpperCase()
+
+  if (normalized === 'BUY') return 'positive'
+
+  if (normalized === 'SELL' || normalized === 'REJECT') {
+    return 'negative'
+  }
+
+  return 'neutral'
+}
+
+function localDateKey(value) {
+  const date = new Date(
+    String(value).includes('T') ? value : `${value}T12:00:00`,
+  )
+
+  if (Number.isNaN(date.getTime())) return null
+
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+
+  return `${year}-${month}-${day}`
+}
+
+function progressFor(item) {
+  const response = item.response || {}
+  const trajectory = Array.isArray(response.trajectory)
+    ? response.trajectory
+    : []
+
+  const forecastPoints = trajectory.filter(
+    (point) => Number(point.day) > 0 && point.date,
+  )
+
+  const today = localDateKey(new Date())
+
+  const remainingPoints = forecastPoints.filter(
+    (point) => localDateKey(point.date) >= today,
+  )
+
+  const originalHorizon = Number(
+    item.horizon || forecastPoints.length || 0,
+  )
+
+  const remainingDays = remainingPoints.length
+
+  const elapsedDays = Math.max(
+    0,
+    Math.min(
+      originalHorizon,
+      originalHorizon - remainingDays,
+    ),
+  )
+
+  const targetDate =
+    item.target_date ||
+    forecastPoints[forecastPoints.length - 1]?.date ||
+    null
+
+  return {
+    trajectory,
+    remainingPoints,
+    originalHorizon,
+    remainingDays,
+    elapsedDays,
+    targetDate,
+  }
+}
+
+function VerificationBadge({ item }) {
+  if (item.verification_status === 'verified') {
+    return (
+      <div
+        className={
+          item.direction_correct
+            ? 'history-status history-status-correct'
+            : 'history-status history-status-incorrect'
+        }
+      >
+        {item.direction_correct ? (
+          <CheckCircle2 size={16} />
+        ) : (
+          <XCircle size={16} />
+        )}
+
+        {item.direction_correct ? 'Correct' : 'Incorrect'}
+      </div>
+    )
+  }
+
+  return (
+    <div
+      className={`history-status history-status-${item.verification_status}`}
+    >
+      <CalendarClock size={16} />
+
+      {item.verification_status === 'due'
+        ? 'Ready to verify'
+        : 'Pending'}
+    </div>
+  )
+}
+
+function PerformanceMetric({
+  icon: Icon,
+  label,
+  value,
+  note,
+  styleName = '',
+}) {
+  return (
+    <article className={`history-performance-card ${styleName}`}>
+      <div className="history-performance-icon">
+        <Icon size={20} />
+      </div>
+
+      <div>
+        <span>{label}</span>
+        <strong>{value}</strong>
+        {note && <small>{note}</small>}
+      </div>
+    </article>
+  )
+}
+
+function ForecastTimeline({ item, progress }) {
+  const verified = item.verification_status === 'verified'
+  const active = !verified && progress.remainingDays > 0
+
+  return (
+    <section className="saved-forecast-timeline">
+      <div className="saved-forecast-timeline-heading">
+        <div>
+          <span className="dashboard-eyebrow">FORECAST TIMELINE</span>
+          <h4>Stored prediction progress</h4>
+        </div>
+
+        <Route size={24} />
+      </div>
+
+      <div className="saved-forecast-timeline-track">
+        <article className="timeline-step timeline-step-complete">
+          <span className="timeline-marker">
+            <CheckCircle2 size={16} />
+          </span>
+
+          <div>
+            <strong>Prediction created</strong>
+            <small>{formatDate(item.created_at)}</small>
+          </div>
+        </article>
+
+        <span className="timeline-connector" />
+
+        <article
+          className={`timeline-step ${
+            active
+              ? 'timeline-step-active'
+              : 'timeline-step-complete'
+          }`}
+        >
+          <span className="timeline-marker">
+            {active ? (
+              <Clock3 size={16} />
+            ) : (
+              <CheckCircle2 size={16} />
+            )}
+          </span>
+
+          <div>
+            <strong>
+              {verified
+                ? 'Forecast completed'
+                : progress.remainingDays > 0
+                  ? `Day ${progress.elapsedDays} of ${progress.originalHorizon}`
+                  : 'Forecast horizon reached'}
+            </strong>
+
+            <small>
+              {progress.remainingDays > 0
+                ? `${progress.remainingDays} trading ${
+                    progress.remainingDays === 1 ? 'day' : 'days'
+                  } remaining`
+                : 'Awaiting or completed verification'}
+            </small>
+          </div>
+        </article>
+
+        <span className="timeline-connector" />
+
+        <article
+          className={`timeline-step ${
+            verified
+              ? 'timeline-step-complete'
+              : 'timeline-step-upcoming'
+          }`}
+        >
+          <span className="timeline-marker">
+            {verified ? (
+              <CheckCircle2 size={16} />
+            ) : (
+              <Target size={16} />
+            )}
+          </span>
+
+          <div>
+            <strong>Target date</strong>
+            <small>{formatDate(progress.targetDate, false)}</small>
+          </div>
+        </article>
+      </div>
+    </section>
+  )
+}
+
+function TransparencyTimeline({ progress }) {
+  if (!progress?.available) return null
+
+  const checkpoints = progress.checkpoints || []
+
+  return (
+    <section className="sprint6-timeline">
+      <div className="sprint6-timeline-heading">
+        <div>
+          <span className="dashboard-eyebrow">FORECAST TIMELINE</span>
+          <h4>Prediction versus market progress</h4>
+        </div>
+
+        <Route size={24} />
+      </div>
+
+      <div className="sprint6-timeline-track">
+        <article className="sprint6-step sprint6-step-complete">
+          <span className="sprint6-marker">
+            <CheckCircle2 size={16} />
+          </span>
+
+          <div>
+            <strong>Day 0</strong>
+            <small>Prediction created</small>
+          </div>
+        </article>
+
+        {checkpoints
+          .filter(
+            (point) =>
+              Number(point.day) > 0 &&
+              Number(point.day) <
+                Number(progress.original_horizon),
+          )
+          .map((point) => (
+            <article
+              key={`${point.day}-${point.actual_date}`}
+              className="sprint6-step sprint6-step-complete"
+            >
+              <span className="sprint6-marker">
+                <CheckCircle2 size={16} />
+              </span>
+
+              <div>
+                <strong>Day {point.day}</strong>
+                <small>
+                  Forecast error{' '}
+                  {formatPercent(
+                    point.forecast_error_pct,
+                    false,
+                    2,
+                  )}
+                </small>
+              </div>
+            </article>
+          ))}
+
+        <article className="sprint6-step sprint6-step-active">
+          <span className="sprint6-marker">
+            <Clock3 size={16} />
+          </span>
+
+          <div>
+            <strong>Today</strong>
+            <small>{progress.status_label}</small>
+          </div>
+        </article>
+
+        <article
+          className={`sprint6-step ${
+            progress.remaining_days > 0
+              ? 'sprint6-step-upcoming'
+              : 'sprint6-step-complete'
+          }`}
+        >
+          <span className="sprint6-marker">
+            <Target size={16} />
+          </span>
+
+          <div>
+            <strong>
+              {progress.remaining_days > 0
+                ? 'Remaining forecast'
+                : 'Forecast completed'}
+            </strong>
+
+            <small>
+              {progress.remaining_days > 0
+                ? `${progress.remaining_days} trading ${
+                    progress.remaining_days === 1
+                      ? 'day'
+                      : 'days'
+                  } remaining`
+                : formatDate(progress.target_date, false)}
+            </small>
+          </div>
+        </article>
+      </div>
+    </section>
+  )
+}
+
+function IntradayStatus({ item, progress }) {
+  const reached =
+    progress?.intraday_target_reached ??
+    item.intraday_target_reached
+
+  const reachedAt =
+    progress?.intraday_target_reached_at ??
+    item.intraday_target_reached_at
+
+  const targetPrice =
+    progress?.intraday_target_price ??
+    item.intraday_target_price ??
+    item.response?.forecast_price
+
+  const closestPrice =
+    progress?.intraday_closest_price ??
+    item.intraday_closest_price
+
+  const closestAt =
+    progress?.intraday_closest_at ??
+    item.intraday_closest_at
+
+  if (reached === true) {
+    return (
+      <article className="intraday-status-card intraday-status-hit">
+        <div className="intraday-status-icon">
+          <Target size={21} />
+        </div>
+
+        <div>
+          <span>Predicted target reached</span>
+          <strong>{formatMoney(targetPrice)}</strong>
+          <small>{formatTime(reachedAt)}</small>
+        </div>
+      </article>
+    )
+  }
+
+  if (reached === false) {
+    return (
+      <article className="intraday-status-card">
+        <div className="intraday-status-icon">
+          <Radar size={21} />
+        </div>
+
+        <div>
+          <span>Closest intraday price</span>
+          <strong>{formatMoney(closestPrice)}</strong>
+          <small>{formatTime(closestAt)}</small>
+        </div>
+      </article>
+    )
+  }
+
+  return (
+    <article className="intraday-status-card intraday-status-pending">
+      <div className="intraday-status-icon">
+        <Radar size={21} />
+      </div>
+
+      <div>
+        <span>Intraday target check</span>
+        <strong>Not checked yet</strong>
+        <small>
+          Run the check to compare historical 5-minute prices.
+        </small>
+      </div>
+    </article>
+  )
+}
+
+function HistoryItem({
+  item,
+  authenticatedHeaders,
+  onChanged,
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const [liveProgress, setLiveProgress] = useState(null)
+  const [progressLoading, setProgressLoading] = useState(false)
+  const [progressError, setProgressError] = useState('')
+  const [actionBusy, setActionBusy] = useState('')
+  const [actionError, setActionError] = useState('')
+
+  const response = item.response || {}
+  const itemTone = tone(item.recommendation)
+  const progress = useMemo(() => progressFor(item), [item])
+
+  const loadProgress = useCallback(async () => {
+    setProgressLoading(true)
+    setProgressError('')
+
+    try {
+      const headers = await authenticatedHeaders()
+
+      const apiResponse = await fetch(
+        `${API_URL}/history/${item.id}/progress`,
+        { headers },
+      )
+
+      const payload = await apiResponse.json().catch(() => null)
+
+      if (!apiResponse.ok) {
+        throw new Error(
+          payload?.detail ||
+            `Unable to load forecast progress (${apiResponse.status}).`,
+        )
+      }
+
+      setLiveProgress(payload)
+    } catch (requestError) {
+      setProgressError(
+        requestError.message ||
+          'Unable to load forecast progress.',
+      )
+    } finally {
+      setProgressLoading(false)
+    }
+  }, [authenticatedHeaders, item.id])
+
+  useEffect(() => {
+    if (!expanded || liveProgress || progressLoading) return
+    loadProgress()
+  }, [
+    expanded,
+    liveProgress,
+    loadProgress,
+    progressLoading,
+  ])
+
+  async function runAction({
+    key,
+    url,
+    method,
+    body,
+    confirmation,
+  }) {
+    if (confirmation && !window.confirm(confirmation)) {
+      return
+    }
+
+    setActionBusy(key)
+    setActionError('')
+
+    try {
+      const headers = await authenticatedHeaders()
+
+      const apiResponse = await fetch(url, {
+        method,
+        headers: {
+          ...headers,
+          ...(body ? { 'Content-Type': 'application/json' } : {}),
+        },
+        body: body ? JSON.stringify(body) : undefined,
+      })
+
+      const payload = await apiResponse.json().catch(() => null)
+
+      if (!apiResponse.ok) {
+        throw new Error(
+          payload?.detail ||
+            `Prediction action failed (${apiResponse.status}).`,
+        )
+      }
+
+      if (key === 'intraday') {
+        setLiveProgress((current) => ({
+          ...(current || {}),
+          available: current?.available ?? true,
+          intraday_target_reached:
+            payload?.intraday_target_reached,
+          intraday_target_reached_at:
+            payload?.intraday_target_reached_at,
+          intraday_target_price:
+            payload?.intraday_target_price,
+          intraday_closest_price:
+            payload?.intraday_closest_price,
+          intraday_closest_at:
+            payload?.intraday_closest_at,
+          intraday_checked_at:
+            payload?.intraday_checked_at,
+        }))
+      }
+
+      await onChanged()
+    } catch (requestError) {
+      setActionError(
+        requestError.message ||
+          'Unable to update this prediction.',
+      )
+    } finally {
+      setActionBusy('')
+    }
+  }
+
+  const chartTrajectory =
+    progress.remainingPoints.length > 0
+      ? progress.remainingPoints
+      : progress.trajectory.slice(-1)
+
+  const remainingLabel =
+    item.verification_status === 'verified'
+      ? 'Completed forecast'
+      : progress.remainingDays > 0
+        ? `${progress.remainingDays}-day forecast remaining`
+        : 'Horizon complete'
+
+  return (
+    <article
+      className={`history-item ${
+        item.is_hidden ? 'history-item-hidden' : ''
+      }`}
+    >
+      <button
+        type="button"
+        className="history-item-summary"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <div className={`history-signal history-signal-${itemTone}`}>
+          {itemTone === 'positive' ? (
+            <TrendingUp size={20} />
+          ) : (
+            <TrendingDown size={20} />
+          )}
+        </div>
+
+        <div className="history-symbol">
+          <strong>{item.ticker}</strong>
+          <span>{remainingLabel}</span>
+        </div>
+
+        <div className="history-recommendation">
+          <strong>{item.recommendation}</strong>
+          <span>{item.confidence}% confidence</span>
+        </div>
+
+        <div className="history-move">
+          <strong>{formatPercent(item.expected_move_pct)}</strong>
+          <span>{formatDate(item.created_at)}</span>
+        </div>
+
+        <VerificationBadge item={item} />
+
+        {expanded ? (
+          <ChevronUp size={20} />
+        ) : (
+          <ChevronDown size={20} />
+        )}
+      </button>
+
+      {expanded && (
+        <div className="history-item-details">
+          <div className="history-item-actions">
+            <button
+              type="button"
+              className="history-action-button"
+              disabled={Boolean(actionBusy)}
+              onClick={() =>
+                runAction({
+                  key: 'visibility',
+                  url: `${API_URL}/history/${item.id}/visibility`,
+                  method: 'PATCH',
+                  body: {
+                    is_hidden: !item.is_hidden,
+                  },
+                })
+              }
+            >
+              {item.is_hidden ? (
+                <Eye size={17} />
+              ) : (
+                <EyeOff size={17} />
+              )}
+
+              {actionBusy === 'visibility'
+                ? 'Saving...'
+                : item.is_hidden
+                  ? 'Restore to Watchlist'
+                  : 'Hide from Watchlist'}
+            </button>
+
+            <button
+              type="button"
+              className="history-action-button"
+              disabled={Boolean(actionBusy)}
+              onClick={() =>
+                runAction({
+                  key: 'intraday',
+                  url: `${API_URL}/history/${item.id}/intraday-check`,
+                  method: 'POST',
+                })
+              }
+            >
+              <Radar size={17} />
+
+              {actionBusy === 'intraday'
+                ? 'Checking...'
+                : 'Check intraday target'}
+            </button>
+
+            {item.verification_status === 'verified' &&
+              !item.details_purged && (
+                <button
+                  type="button"
+                  className="history-action-button history-action-danger"
+                  disabled={Boolean(actionBusy)}
+                  onClick={() =>
+                    runAction({
+                      key: 'delete',
+                      url: `${API_URL}/history/${item.id}/details`,
+                      method: 'DELETE',
+                      confirmation:
+                        'Delete the detailed forecast data? DiMarket will keep the compact verified result internally for performance statistics.',
+                    })
+                  }
+                >
+                  <Trash2 size={17} />
+
+                  {actionBusy === 'delete'
+                    ? 'Deleting...'
+                    : 'Delete completed details'}
+                </button>
+              )}
+          </div>
+
+          {actionError && (
+            <div className="history-action-error">
+              <CircleAlert size={18} />
+              {actionError}
+            </div>
+          )}
+
+          <div className="saved-prediction-overview">
+            <div>
+              <span>Prediction created</span>
+              <strong>{formatDate(item.created_at)}</strong>
+            </div>
+
+            <div>
+              <span>Original horizon</span>
+              <strong>
+                {progress.originalHorizon} trading days
+              </strong>
+            </div>
+
+            <div>
+              <span>Confidence</span>
+              <strong>{item.confidence}%</strong>
+            </div>
+
+            <div>
+              <span>Status</span>
+              <strong>
+                {item.verification_status === 'verified'
+                  ? 'Completed'
+                  : progress.remainingDays > 0
+                    ? `Active · Day ${progress.elapsedDays} of ${progress.originalHorizon}`
+                    : 'Ready to verify'}
+              </strong>
+            </div>
+
+            <div>
+              <span>Remaining days</span>
+              <strong>{progress.remainingDays}</strong>
+            </div>
+
+            <div>
+              <span>Target date</span>
+              <strong>
+                {formatDate(progress.targetDate, false)}
+              </strong>
+            </div>
+          </div>
+
+          {progressLoading && (
+            <div className="sprint6-progress-state">
+              <LoaderCircle
+                className="history-spinner"
+                size={20}
+              />
+              Comparing the stored forecast with available market
+              data...
+            </div>
+          )}
+
+          {progressError && (
+            <div className="sprint6-progress-state sprint6-progress-error">
+              <CircleAlert size={20} />
+              {progressError}
+            </div>
+          )}
+
+          {liveProgress && !liveProgress.available && (
+            <div className="sprint6-progress-state">
+              <CircleAlert size={20} />
+              {liveProgress.message}
+            </div>
+          )}
+
+          <div className="intraday-status-grid">
+            <IntradayStatus
+              item={item}
+              progress={liveProgress}
+            />
+          </div>
+
+          {liveProgress?.available && (
+            <>
+              <div className="sprint6-report-grid">
+                <div>
+                  <span>Forecast error so far</span>
+                  <strong>
+                    {formatPercent(
+                      liveProgress.forecast_error_so_far_pct,
+                      false,
+                      2,
+                    )}
+                  </strong>
+                </div>
+
+                <div>
+                  <span>Predicted price today</span>
+                  <strong>
+                    {formatMoney(
+                      liveProgress.latest_predicted_price,
+                    )}
+                  </strong>
+                </div>
+              </div>
+
+              <TransparencyTimeline progress={liveProgress} />
+            </>
+          )}
+
+          <ForecastTimeline item={item} progress={progress} />
+
+          {progress.trajectory.length > 0 &&
+            !item.details_purged && (
+              <div className="saved-trajectory-block">
+                <div className="saved-trajectory-note">
+                  <strong>
+                    Remaining saved forecast:{' '}
+                    {progress.remainingDays} trading{' '}
+                    {progress.remainingDays === 1
+                      ? 'day'
+                      : 'days'}
+                  </strong>
+
+                  <span>
+                    This chart uses the original stored trajectory and
+                    automatically hides forecast days that have passed.
+                    No rerun is required.
+                  </span>
+                </div>
+
+                <ForecastTrajectory
+                  trajectory={chartTrajectory}
+                  ticker={item.ticker}
+                />
+              </div>
+            )}
+
+          <div className="history-detail-metrics">
+            <div>
+              <span>Starting price</span>
+              <strong>{formatMoney(response.current_price)}</strong>
+            </div>
+
+            <div>
+              <span>Predicted target</span>
+              <strong>{formatMoney(response.forecast_price)}</strong>
+            </div>
+          </div>
+
+          {item.verification_status === 'verified' && (
+            <div className="verification-result-grid">
+              <article>
+                <BadgeCheck size={20} />
+                <span>Direction result</span>
+                <strong>
+                  {item.direction_correct
+                    ? 'Correct'
+                    : 'Incorrect'}
+                </strong>
+              </article>
+
+              <article>
+                <Target size={20} />
+                <span>Price accuracy</span>
+                <strong>
+                  {formatPercent(
+                    item.price_accuracy_pct,
+                    false,
+                    1,
+                  )}
+                </strong>
+              </article>
+
+              <article>
+                <CalendarClock size={20} />
+                <span>Verified</span>
+                <strong>{formatDate(item.verified_at)}</strong>
+              </article>
+            </div>
+          )}
+
+          {!item.details_purged &&
+            response.explanation?.summary && (
+              <p className="history-explanation">
+                {response.explanation.summary}
+              </p>
+            )}
+
+          {!item.details_purged && (
+            <div className="history-reasons-grid">
+              <div>
+                <h4>Supporting evidence</h4>
+                <ul>
+                  {(response.reasons || []).map((reason) => (
+                    <li key={reason}>{reason}</li>
+                  ))}
+
+                  {!response.reasons?.length && (
+                    <li>No supporting reasons.</li>
+                  )}
+                </ul>
+              </div>
+
+              <div>
+                <h4>Risks and warnings</h4>
+                <ul>
+                  {(response.warnings || []).map((warning) => (
+                    <li key={warning}>{warning}</li>
+                  ))}
+
+                  {!response.warnings?.length && (
+                    <li>No model warnings.</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          {item.details_purged && (
+            <div className="history-purged-message">
+              <ShieldCheck size={20} />
+              Detailed forecast data was removed. The verified result
+              remains part of your internal performance statistics.
+            </div>
+          )}
+        </div>
+      )}
+    </article>
+  )
+}
+
+export default function PredictionHistory({
+  refreshKey = 0,
+  mode = 'all',
+}) {
+  const [items, setItems] = useState([])
+  const [serverStats, setServerStats] = useState(null)
+  const [loading, setLoading] = useState(true)
+  const [verifying, setVerifying] = useState(false)
+  const [showHidden, setShowHidden] = useState(false)
+  const [error, setError] = useState('')
+  const [verificationMessage, setVerificationMessage] =
+    useState('')
+
+  const authenticatedHeaders = useCallback(async () => {
+    const {
+      data: { session },
+    } = await supabase.auth.getSession()
+
+    if (!session?.access_token) {
+      throw new Error(
+        'Your session has expired. Please sign in again.',
+      )
+    }
+
+    return {
+      Authorization: `Bearer ${session.access_token}`,
+    }
+  }, [])
+
+  const loadHistory = useCallback(
+    async ({ showLoader = true } = {}) => {
+      if (showLoader) setLoading(true)
+      setError('')
+
+      try {
+        const headers = await authenticatedHeaders()
+        const includeHidden =
+          mode === 'watchlist' && showHidden
+
+        const [historyResponse, statsResponse] =
+          await Promise.all([
+            fetch(
+              `${API_URL}/history/?limit=50&include_hidden=${includeHidden}`,
+              { headers },
+            ),
+            fetch(`${API_URL}/history/stats`, { headers }),
+          ])
+
+        const historyPayload = await historyResponse
+          .json()
+          .catch(() => null)
+
+        const statsPayload = await statsResponse
+          .json()
+          .catch(() => null)
+
+        if (!historyResponse.ok) {
+          throw new Error(
+            historyPayload?.detail ||
+              `Unable to load prediction history (${historyResponse.status}).`,
+          )
+        }
+
+        setItems(historyPayload?.items || [])
+        setServerStats(
+          statsResponse.ok ? statsPayload : null,
+        )
+      } catch (requestError) {
+        setError(
+          requestError.message ||
+            'Unable to load prediction history.',
+        )
+      } finally {
+        if (showLoader) setLoading(false)
+      }
+    },
+    [authenticatedHeaders, mode, showHidden],
+  )
+
+  useEffect(() => {
+    loadHistory()
+  }, [loadHistory, refreshKey])
+
+  async function verifyNow() {
+    setVerifying(true)
+    setError('')
+    setVerificationMessage('')
+
+    try {
+      const headers = await authenticatedHeaders()
+
+      const response = await fetch(
+        `${API_URL}/history/verify`,
+        {
+          method: 'POST',
+          headers,
+        },
+      )
+
+      const payload = await response.json().catch(() => null)
+
+      if (!response.ok) {
+        throw new Error(
+          payload?.detail ||
+            `Verification failed (${response.status}).`,
+        )
+      }
+
+      const checked = Number(payload?.checked || 0)
+      const verified = Number(payload?.verified || 0)
+      const waiting = Number(
+        payload?.waiting_for_market_data || 0,
+      )
+      const failed = Number(payload?.failed || 0)
+
+      setVerificationMessage(
+        checked === 0
+          ? 'No predictions are due for verification yet.'
+          : `${verified} verified, ${waiting} waiting for market data${
+              failed ? `, ${failed} failed.` : '.'
+            }`,
+      )
+
+      await loadHistory({ showLoader: false })
+    } catch (requestError) {
+      setError(
+        requestError.message ||
+          'Unable to verify predictions.',
+      )
+    } finally {
+      setVerifying(false)
+    }
+  }
+
+  const fallbackStats = useMemo(() => {
+    const verified = items.filter(
+      (item) =>
+        item.verification_status === 'verified',
+    )
+
+    const correct = verified.filter(
+      (item) => item.direction_correct === true,
+    )
+
+    const averageConfidence = items.length
+      ? items.reduce(
+          (sum, item) =>
+            sum + Number(item.confidence || 0),
+          0,
+        ) / items.length
+      : 0
+
+    const averagePriceAccuracy = verified.length
+      ? verified.reduce(
+          (sum, item) =>
+            sum +
+            Number(item.price_accuracy_pct || 0),
+          0,
+        ) / verified.length
+      : 0
+
+    const horizonScores = {}
+
+    verified.forEach((item) => {
+      const horizon = Number(item.horizon)
+
+      if (!horizonScores[horizon]) {
+        horizonScores[horizon] = []
+      }
+
+      horizonScores[horizon].push(
+        item.direction_correct === true,
+      )
+    })
+
+    const entries = Object.entries(horizonScores)
+
+    const bestHorizon = entries.length
+      ? Number(
+          entries.sort(([, a], [, b]) => {
+            const aAccuracy =
+              a.filter(Boolean).length / a.length
+
+            const bAccuracy =
+              b.filter(Boolean).length / b.length
+
+            return bAccuracy !== aAccuracy
+              ? bAccuracy - aAccuracy
+              : b.length - a.length
+          })[0][0],
+        )
+      : null
+
+    return {
+      total_forecasts: items.length,
+      verified_forecasts: verified.length,
+      pending_forecasts:
+        items.length - verified.length,
+      correct_direction: correct.length,
+      direction_accuracy_pct: verified.length
+        ? (correct.length / verified.length) * 100
+        : 0,
+      average_confidence_pct: averageConfidence,
+      average_price_accuracy_pct:
+        averagePriceAccuracy,
+      best_horizon: bestHorizon,
+    }
+  }, [items])
+
+  const stats = {
+    ...fallbackStats,
+    ...(serverStats || {}),
+  }
+
+  const bestHorizonLabel = stats.best_horizon
+    ? `${stats.best_horizon} trading ${
+        Number(stats.best_horizon) === 1
+          ? 'day'
+          : 'days'
+      }`
+    : 'Not enough data'
+
+  const sectionId =
+    mode === 'watchlist'
+      ? 'watchlist'
+      : 'performance'
+
+  return (
+    <section
+      id={sectionId}
+      className="prediction-history-section"
+    >
+      <div className="section-heading history-section-heading">
+        <div>
+          <span className="dashboard-eyebrow">
+            {mode === 'watchlist'
+              ? 'SAVED FORECASTS'
+              : 'YOUR AI INVESTING JOURNAL'}
+          </span>
+
+          <h2>
+            {mode === 'watchlist'
+              ? 'Watchlist'
+              : 'Prediction Performance'}
+          </h2>
+
+          <p className="history-section-description">
+            {mode === 'watchlist'
+              ? 'Review saved forecasts, track progress, manage completed records, and check whether predicted targets were reached intraday.'
+              : 'Measure successful predictions, direction accuracy, confidence, and verified performance over time.'}
+          </p>
+        </div>
+
+        <div className="history-heading-actions">
+          {mode === 'watchlist' && (
+            <button
+              type="button"
+              className="history-verify-button"
+              onClick={() =>
+                setShowHidden((value) => !value)
+              }
+            >
+              {showHidden ? (
+                <EyeOff size={18} />
+              ) : (
+                <Eye size={18} />
+              )}
+
+              {showHidden
+                ? 'Hide archived'
+                : 'Show hidden'}
+            </button>
+          )}
+
+          <button
+            type="button"
+            className="history-verify-button"
+            onClick={verifyNow}
+            disabled={verifying}
+          >
+            <RefreshCw
+              size={18}
+              className={
+                verifying ? 'history-spinner' : ''
+              }
+            />
+
+            {verifying
+              ? 'Checking predictions...'
+              : 'Verify due predictions'}
+          </button>
+
+          <History size={30} />
+        </div>
+      </div>
+
+      {mode !== 'watchlist' && (
+        <div className="history-performance-grid">
+          <PerformanceMetric
+            icon={Target}
+            label="Total forecasts"
+            value={stats.total_forecasts ?? 0}
+            note="Lifetime prediction records"
+          />
+
+          <PerformanceMetric
+            icon={BadgeCheck}
+            label="Verified forecasts"
+            value={stats.verified_forecasts ?? 0}
+            note={`${stats.correct_direction ?? 0} correct directions`}
+            styleName="history-performance-verified"
+          />
+
+          <PerformanceMetric
+            icon={Clock3}
+            label="Pending verification"
+            value={stats.pending_forecasts ?? 0}
+            note="Waiting for target dates"
+          />
+
+          <PerformanceMetric
+            icon={ShieldCheck}
+            label="Direction accuracy"
+            value={formatPercent(
+              stats.direction_accuracy_pct || 0,
+              false,
+              1,
+            )}
+            note="Verified forecasts only"
+            styleName="history-performance-highlight"
+          />
+
+          <PerformanceMetric
+            icon={BarChart3}
+            label="Price accuracy"
+            value={formatPercent(
+              stats.average_price_accuracy_pct || 0,
+              false,
+              1,
+            )}
+            note="Average verified accuracy"
+          />
+
+          <PerformanceMetric
+            icon={TrendingUp}
+            label="Average confidence"
+            value={formatPercent(
+              stats.average_confidence_pct || 0,
+              false,
+              0,
+            )}
+            note="Across all forecasts"
+          />
+
+          <PerformanceMetric
+            icon={CalendarClock}
+            label="Best horizon"
+            value={bestHorizonLabel}
+            note="Highest verified direction rate"
+          />
+        </div>
+      )}
+
+      {verificationMessage && (
+        <div className="history-verification-message">
+          <CheckCircle2 size={18} />
+          {verificationMessage}
+        </div>
+      )}
+
+      {loading && (
+        <div className="history-state">
+          <LoaderCircle
+            className="history-spinner"
+            size={28}
+          />
+          Loading your prediction records...
+        </div>
+      )}
+
+      {error && (
+        <div className="history-state history-state-error">
+          <CircleAlert size={22} />
+          {error}
+        </div>
+      )}
+
+      {!loading &&
+        !error &&
+        !items.length &&
+        mode === 'watchlist' && (
+          <div className="history-state">
+            <History size={30} />
+            {showHidden
+              ? 'No hidden predictions are available.'
+              : 'Your saved forecasts will appear here.'}
+          </div>
+        )}
+
+      {mode !== 'performance' &&
+        !loading &&
+        !error &&
+        items.length > 0 && (
+          <div className="history-list">
+            {items.map((item) => (
+              <HistoryItem
+                key={item.id}
+                item={item}
+                authenticatedHeaders={
+                  authenticatedHeaders
+                }
+                onChanged={() =>
+                  loadHistory({ showLoader: false })
+                }
+              />
+            ))}
+          </div>
+        )}
+    </section>
+  )
+}

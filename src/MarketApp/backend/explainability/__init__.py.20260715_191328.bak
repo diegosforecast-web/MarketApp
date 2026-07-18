@@ -1,0 +1,21 @@
+"""Explainability package for DiMarket."""
+
+from explainability.explanation import ExplanationBuilder
+from explainability.feature_dictionary import FeatureDictionary
+from explainability.models import (
+    FeatureContribution,
+    PredictionExplanation,
+)
+from explainability.narrative import NarrativeBuilder
+from explainability.reporting import format_explanation_report
+from explainability.shap_engine import ShapEngine
+
+__all__ = [
+    "ExplanationBuilder",
+    "FeatureContribution",
+    "FeatureDictionary",
+    "NarrativeBuilder",
+    "PredictionExplanation",
+    "ShapEngine",
+    "format_explanation_report",
+]
