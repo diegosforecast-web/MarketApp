@@ -17,7 +17,7 @@ FREE_TOTAL_LIMIT = 3
 STANDARD_UNLIMITED_HORIZON = 3
 STANDARD_MONTHLY_5_DAY_CREDITS = 3
 PREMIUM_UNLIMITED_HORIZON = 5
-PREMIUM_MONTHLY_30_DAY_CREDITS = 3
+PREMIUM_MONTHLY_15_DAY_CREDITS = 3
 
 
 @dataclass(frozen=True)
@@ -45,7 +45,7 @@ class EntitlementService:
     Current product rules:
     - Explorer: 3 lifetime complimentary forecasts, horizons 1-3.
     - Standard: unlimited horizons 1-3, plus 3 five-day credits per period.
-    - Premium: unlimited horizons 1-5, plus 3 thirty-day credits per period.
+    - Premium: unlimited horizons 1-5, plus 3 15-day credits per period.
     - Gold: unlimited access to every production-supported horizon.
 
     Paid credit periods use Stripe's current_period_start/current_period_end
@@ -193,7 +193,7 @@ class EntitlementService:
 
         thirty_day_usage = self.supabase.count_usage(
             user_id=user_id,
-            horizon=30,
+            horizon=15,
             created_at_gte=period_start,
             created_at_lt=period_end,
         )
@@ -260,15 +260,15 @@ class EntitlementService:
         if plan == PLAN_PREMIUM:
             special_credits.append(
                 {
-                    "horizon": 30,
-                    "limit": PREMIUM_MONTHLY_30_DAY_CREDITS,
+                    "horizon": 15,
+                    "limit": PREMIUM_MONTHLY_15_DAY_CREDITS,
                     "used": thirty_day_usage,
                     "remaining": max(
                         0,
-                        PREMIUM_MONTHLY_30_DAY_CREDITS
+                        PREMIUM_MONTHLY_15_DAY_CREDITS
                         - thirty_day_usage,
                     ),
-                    "available_in_production": 30 in supported,
+                    "available_in_production": 15 in supported,
                     "period_start": period_start.isoformat(),
                     "period_end": period_end.isoformat(),
                 }
@@ -365,19 +365,19 @@ class EntitlementService:
             if horizon <= PREMIUM_UNLIMITED_HORIZON:
                 return entitlements
 
-            if horizon == 30:
+            if horizon == 15:
                 credit = entitlements["special_credits"][0]
 
                 if not credit["available_in_production"]:
                     raise EntitlementError(
-                        "Your Premium plan includes 30-day credits, but "
-                        "the 30-day production model has not been released yet.",
+                        "Your Premium plan includes 15-day credits, but "
+                        "the 15-day production model has not been released yet.",
                         entitlements=entitlements,
                     )
 
                 if credit["remaining"] <= 0:
                     raise EntitlementError(
-                        "Your 3 Premium thirty-day forecast credits "
+                        "Your 3 Premium 15-day forecast credits "
                         "for this period have been used.",
                         entitlements=entitlements,
                     )
@@ -386,7 +386,7 @@ class EntitlementService:
 
             raise EntitlementError(
                 "Premium includes unlimited 1-5 day forecasts and "
-                "three 30-day credits per period.",
+                "three 15-day credits per period.",
                 entitlements=entitlements,
             )
 

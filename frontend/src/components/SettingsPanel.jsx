@@ -33,7 +33,7 @@ const PLAN_DESCRIPTIONS = {
   standard:
     'Unlimited 1–3 day forecasts plus monthly 5-day credits.',
   premium:
-    'Unlimited 1–5 day forecasts plus monthly 30-day credits.',
+    'Unlimited 1–5 day forecasts plus monthly 15-day credits.',
   gold:
     'The complete DiMarket experience across every production-supported horizon.',
 }
@@ -200,7 +200,7 @@ export default function SettingsPanel() {
         )
       }
 
-      const redirectTo = `${window.location.origin}/`
+      const redirectTo = `${window.location.origin}/update-password`
 
       const { error: resetError } =
         await supabase.auth.resetPasswordForEmail(
@@ -466,3 +466,4 @@ export default function SettingsPanel() {
     </section>
   )
 }
+

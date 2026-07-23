@@ -1,0 +1,15 @@
+{
+  "projects": {
+    "default": "diego-market-forecast"
+  },
+  "targets": {
+    "diego-market-forecast": {
+      "hosting": {
+        "dimarket": [
+          "di-market"
+        ]
+      }
+    }
+  },
+  "etags": {}
+}

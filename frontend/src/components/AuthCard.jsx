@@ -75,7 +75,7 @@ export default function AuthCard() {
           email: cleanEmail,
           password,
           options: {
-            emailRedirectTo: window.location.origin,
+            emailredirectTo: `${window.location.origin}/update-password`,
           },
         })
 
@@ -92,7 +92,7 @@ export default function AuthCard() {
         const { error } = await supabase.auth.resetPasswordForEmail(
           cleanEmail,
           {
-            redirectTo: window.location.origin,
+            redirectTo: `${window.location.origin}/update-password`,
           },
         )
 

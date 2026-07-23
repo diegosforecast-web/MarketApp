@@ -190,7 +190,7 @@ async def stripe_webhook(
     except stripe.error.SignatureVerificationError as exc:
         raise HTTPException(
             status_code=400,
-            detail="Invalid webhook signature.",
+            detail="Invalid webhook signature: {str(exc)}",
         ) from exc
 
     event_id = event["id"]

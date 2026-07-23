@@ -29,7 +29,7 @@ const PLAN_NAMES = {
 const PLAN_COPY = {
   free: 'Discover how DiMarket thinks with transparent AI analysis.',
   standard: 'Unlimited 1-3 day forecasts plus three monthly 5-day credits.',
-  premium: 'Unlimited 1-5 day forecasts plus three monthly 30-day credits with an extended-horizon warning.',
+  premium: 'Unlimited 1-5 day forecasts plus three monthly 15-day credits with an extended-horizon warning.',
   gold: 'Unlimited access to every production-supported horizon with clear confidence messaging.',
 }
 
@@ -65,9 +65,8 @@ const PLAN_CARDS = [
     name: 'Premium',
     price: '$16.00 / month',
     tagline: 'Professional decision support.',
-    access: 'Unlimited 1-5 day forecasts - 3 monthly 30-day credits',
+    access: 'Unlimited 1-5 day forecasts - 3 monthly 15-day credits',
     features: [
-      '30-day forecasts include a lower-confidence warning',
       'Historical validation',
       'Stored prediction tracking',
       'PDF reports',
@@ -430,9 +429,7 @@ export default function Dashboard() {
 
     if (planKey === 'premium' && Number(horizon) === 30) {
       setForecastWarning({
-        title: '30-day forecast confidence notice',
-        message:
-          'The 30-day forecast is an extended-horizon estimate and generally carries lower confidence than short-term forecasts. DiMarket will show the model confidence clearly with the result.',
+       
       })
       return
     }
