@@ -1,5 +1,6 @@
 ﻿from __future__ import annotations
 
+import logging
 import os
 from datetime import date, datetime
 from typing import Any
@@ -9,6 +10,9 @@ from supabase import create_client
 
 
 load_dotenv()
+
+
+logger = logging.getLogger(__name__)
 
 
 class SupabaseService:
@@ -60,7 +64,65 @@ class SupabaseService:
             .execute()
         )
 
-        return result.data
+        if result is None:
+            return None
+        if result.data is not None:
+            return result.data
+
+        logger.warning(
+            "Profile missing for user %s; attempting automatic repair.",
+            user_id,
+        )
+
+        try:
+            auth_result = (
+                self.client.auth.admin.get_user_by_id(user_id)
+            )
+            auth_user = getattr(auth_result, "user", None)
+            email = getattr(auth_user, "email", None)
+
+            if not email:
+                logger.error(
+                    "Cannot repair profile for user %s because no "
+                    "Auth email was found.",
+                    user_id,
+                )
+                return None
+
+            (
+                self.client.table("profiles")
+                .upsert(
+                    {
+                        "id": user_id,
+                        "email": email,
+                        "plan": "free",
+                        "subscription_status": "free",
+                    },
+                    on_conflict="id",
+                    ignore_duplicates=True,
+                )
+                .execute()
+            )
+
+            repaired = (
+                self.client.table("profiles")
+                .select(self._profile_columns())
+                .eq("id", user_id)
+                .maybe_single()
+                .execute()
+            )
+
+            if repaired is None:
+                return None
+
+            return repaired.data
+
+        except Exception:
+            logger.exception(
+                "Automatic profile repair failed for user %s.",
+                user_id,
+            )
+            return None
 
     def update_plan_by_email(
         self,
