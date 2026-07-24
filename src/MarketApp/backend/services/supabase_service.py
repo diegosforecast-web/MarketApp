@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import logging
 import os
@@ -123,6 +123,83 @@ class SupabaseService:
                 user_id,
             )
             return None
+
+    def get_subscription_override(
+        self,
+        *,
+        user_id: str,
+    ) -> dict[str, Any] | None:
+        result = (
+            self.client.table("subscription_overrides")
+            .select(
+                "user_id,enabled,plan,subscription_status,"
+                "current_period_start,current_period_end,updated_by,"
+                "created_at,updated_at"
+            )
+            .eq("user_id", user_id)
+            .maybe_single()
+            .execute()
+        )
+
+        if result is None:
+            return None
+
+        return result.data
+
+    def save_subscription_override(
+        self,
+        *,
+        user_id: str,
+        plan: str,
+        subscription_status: str,
+        enabled: bool = True,
+        current_period_start: str | None = None,
+        current_period_end: str | None = None,
+        updated_by: str | None = None,
+    ) -> dict[str, Any]:
+        payload: dict[str, Any] = {
+            "user_id": user_id,
+            "enabled": bool(enabled),
+            "plan": plan.strip().lower(),
+            "subscription_status": (
+                subscription_status.strip().lower()
+            ),
+            "current_period_start": current_period_start,
+            "current_period_end": current_period_end,
+            "updated_by": updated_by,
+            "updated_at": datetime.utcnow().isoformat(),
+        }
+
+        result = (
+            self.client.table("subscription_overrides")
+            .upsert(
+                payload,
+                on_conflict="user_id",
+            )
+            .execute()
+        )
+
+        if not result.data:
+            raise RuntimeError(
+                "Supabase did not return the saved subscription "
+                "override."
+            )
+
+        return result.data[0]
+
+    def clear_subscription_override(
+        self,
+        *,
+        user_id: str,
+    ) -> bool:
+        result = (
+            self.client.table("subscription_overrides")
+            .delete()
+            .eq("user_id", user_id)
+            .execute()
+        )
+
+        return bool(result.data)
 
     def update_plan_by_email(
         self,
