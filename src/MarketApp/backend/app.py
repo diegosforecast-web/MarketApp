@@ -11,6 +11,7 @@ from endpoints.community import router as community_router
 from endpoints.entitlements import router as entitlements_router
 from endpoints.forecast import router as forecast_router
 from endpoints.history import router as history_router
+from endpoints.internal_testing import router as internal_testing_router
 from endpoints.portfolio import router as portfolio_router
 from endpoints.watchlist import router as watchlist_router
 from middleware.request_logging import RequestLoggingMiddleware
@@ -110,6 +111,15 @@ app.include_router(
     community_router,
     prefix="/community",
     tags=["Community"],
+)
+
+# The router remains mounted in every environment so production requests get a
+# uniform 404 from its authorization guard. It is omitted from OpenAPI and
+# performs no work unless explicitly enabled outside production.
+app.include_router(
+    internal_testing_router,
+    prefix="/internal/subscriptions",
+    tags=["Internal Subscription Testing"],
 )
 
 @app.on_event("startup")

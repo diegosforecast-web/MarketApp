@@ -17,6 +17,7 @@ import {
 import { useAuth } from '../contexts/AuthContext'
 import { supabase } from '../lib/supabase'
 import './SettingsPanel.css'
+import InternalSubscriptionToolkit from './InternalSubscriptionToolkit'
 
 const API_URL =
   import.meta.env.VITE_API_URL || 'http://127.0.0.1:8000'
@@ -436,6 +437,8 @@ export default function SettingsPanel() {
           </button>
         </article>
       </div>
+
+      <InternalSubscriptionToolkit />
 
       <div className="settings-security-note">
         <ShieldCheck size={20} />
