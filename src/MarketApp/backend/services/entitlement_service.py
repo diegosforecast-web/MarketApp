@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from services.supabase_service import SupabaseService
+from internal_testing.subscription_toolkit import SubscriptionTestingToolkit
 
 
 PLAN_FREE = "free"
@@ -54,6 +55,7 @@ class EntitlementService:
 
     def __init__(self) -> None:
         self.supabase = SupabaseService()
+        self.testing_toolkit = SubscriptionTestingToolkit()
 
     @staticmethod
     def _normalize_plan(value: str | None) -> str:
@@ -155,6 +157,28 @@ class EntitlementService:
         self,
         user_id: str,
     ) -> dict[str, Any]:
+        testing_snapshot = self.testing_toolkit.get_effective_snapshot(user_id)
+        if testing_snapshot:
+            return {
+                "id": user_id,
+                "plan": testing_snapshot.get("plan", PLAN_FREE),
+                "subscription_status": testing_snapshot.get("subscription_status", "free"),
+                "current_period_start": testing_snapshot.get("current_period_start"),
+                "current_period_end": testing_snapshot.get("current_period_end"),
+                "internal_testing_source": testing_snapshot.get("source"),
+                "internal_testing_scenario": testing_snapshot.get("scenario"),
+            }
+
+        # Synthetic QA identities never query or repair customer profiles.
+        if user_id.startswith("qa:"):
+            return {
+                "id": user_id,
+                "plan": PLAN_FREE,
+                "subscription_status": "free",
+                "current_period_start": None,
+                "current_period_end": None,
+            }
+
         profile = self.supabase.get_profile(user_id)
 
         if profile:
@@ -180,23 +204,26 @@ class EntitlementService:
 
         period_start, period_end = self._period_window(profile)
 
-        total_usage = self.supabase.count_usage(
-            user_id=user_id,
-        )
+        if user_id.startswith("qa:"):
+            total_usage = five_day_usage = thirty_day_usage = 0
+        else:
+            total_usage = self.supabase.count_usage(
+                user_id=user_id,
+            )
 
-        five_day_usage = self.supabase.count_usage(
-            user_id=user_id,
-            horizon=5,
-            created_at_gte=period_start,
-            created_at_lt=period_end,
-        )
+            five_day_usage = self.supabase.count_usage(
+                user_id=user_id,
+                horizon=5,
+                created_at_gte=period_start,
+                created_at_lt=period_end,
+            )
 
-        thirty_day_usage = self.supabase.count_usage(
-            user_id=user_id,
-            horizon=15,
-            created_at_gte=period_start,
-            created_at_lt=period_end,
-        )
+            thirty_day_usage = self.supabase.count_usage(
+                user_id=user_id,
+                horizon=15,
+                created_at_gte=period_start,
+                created_at_lt=period_end,
+            )
 
         if plan == PLAN_FREE:
             base_limit: int | None = FREE_TOTAL_LIMIT

@@ -364,3 +364,14 @@
     width: 100%;
   }
 }
+
+.internal-subscription-toolkit {
+  margin-top: 1.5rem; padding: 1rem; border: 1px dashed currentColor; border-radius: 14px;
+  display: grid; gap: .8rem;
+}
+.internal-subscription-toolkit > div:first-child { display: grid; grid-template-columns: auto 1fr; gap: .35rem .6rem; align-items: center; }
+.internal-subscription-toolkit > div:first-child small { grid-column: 2; }
+.internal-subscription-toolkit label { display: grid; gap: .35rem; }
+.internal-subscription-toolkit input, .internal-subscription-toolkit select { padding: .65rem; border-radius: 8px; }
+.internal-toolkit-row { display: flex; gap: .6rem; flex-wrap: wrap; }
+.internal-toolkit-reset { display: inline-flex; align-items: center; gap: .4rem; width: fit-content; }
