@@ -38,3 +38,62 @@ QA authentication uses `Authorization: QA <session_id>` plus `X-DiMarket-QA-Toke
 ## Stripe Test Clocks
 
 Test Clock operations are disabled unless `ENABLE_STRIPE_TEST_CLOCKS=true`, the Stripe key starts with `sk_test_`, and the installed Stripe SDK exposes Test Clocks. Unavailable environments receive a controlled `503`; production Stripe behavior is untouched.
+
+# Final Integration Status
+
+Milestone 2 was completed, reviewed, and merged into `main`.
+
+## Integration Record
+
+- Pull request: #2
+- Feature branch: `feature/milestone-2-internal-testing`
+- Final feature-branch commit:
+  `642b3bca741bbc371b564427ba0dd020714cc8b1`
+- Verified merge commit:
+  `39b6f039087a8cd389e1a7a397ebd3dcd5242f77`
+- Repository status after merge:
+  - Branch: `main`
+  - Synchronized with `origin/main`
+  - Working tree clean
+
+## Final Verification
+
+Run from:
+
+`src/MarketApp/backend`
+
+Full backend suite:
+
+`python -m pytest -q`
+
+Result:
+
+`52 passed, 14 skipped, 5 warnings`
+
+Internal toolkit suite:
+
+`python -m pytest -q tests/test_subscription_toolkit.py`
+
+Result:
+
+`7 passed`
+
+Frontend verification:
+
+- `npm ci` completed successfully.
+- Production build completed successfully.
+
+## Engineering Decision
+
+Milestone 2 is approved and closed.
+
+Milestone 3 may begin from:
+
+`39b6f039087a8cd389e1a7a397ebd3dcd5242f77`
+
+## Future Hardening
+
+Add explicit automated regression coverage for the supported
+`ENVIRONMENT=prod` alias.
+
+This is a future hardening improvement and does not block Milestone 3.
