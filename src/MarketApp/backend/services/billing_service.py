@@ -280,6 +280,25 @@ class BillingService:
                 "current_period_end",
             )
         )
+        cancel_at_period_end = bool(
+            self._value(
+                subscription,
+                "cancel_at_period_end",
+                False,
+            )
+        )
+        canceled_at = self._timestamp_to_iso(
+            self._value(
+                subscription,
+                "canceled_at",
+            )
+        )
+        trial_end = self._timestamp_to_iso(
+            self._value(
+                subscription,
+                "trial_end",
+            )
+        )
 
         if user_id:
             updated = self.supabase.update_subscription_by_user_id(
@@ -291,6 +310,9 @@ class BillingService:
                 stripe_price_id=price_id,
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
+                cancel_at_period_end=cancel_at_period_end,
+                canceled_at=canceled_at,
+                trial_end=trial_end,
             )
 
             if updated:
@@ -305,6 +327,9 @@ class BillingService:
                 stripe_price_id=price_id,
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
+                cancel_at_period_end=cancel_at_period_end,
+                canceled_at=canceled_at,
+                trial_end=trial_end,
             )
 
             if updated:
@@ -320,6 +345,9 @@ class BillingService:
                 subscription_status=status,
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
+                cancel_at_period_end=cancel_at_period_end,
+                canceled_at=canceled_at,
+                trial_end=trial_end,
             )
 
     def handle_checkout_completed(
