@@ -268,17 +268,18 @@ class BillingService:
             customer = stripe.Customer.retrieve(customer_id)
             fallback_email = self._value(customer, "email")
 
+        subscription_items = (
+            self._value(self._value(subscription, "items"), "data") or []
+        )
+        primary_item = subscription_items[0] if subscription_items else None
+
         current_period_start = self._timestamp_to_iso(
-            self._value(
-                subscription,
-                "current_period_start",
-            )
+            self._value(primary_item, "current_period_start")
+            or self._value(subscription, "current_period_start")
         )
         current_period_end = self._timestamp_to_iso(
-            self._value(
-                subscription,
-                "current_period_end",
-            )
+            self._value(primary_item, "current_period_end")
+            or self._value(subscription, "current_period_end")
         )
         cancel_at_period_end = bool(
             self._value(
