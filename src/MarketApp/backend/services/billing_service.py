@@ -268,16 +268,36 @@ class BillingService:
             customer = stripe.Customer.retrieve(customer_id)
             fallback_email = self._value(customer, "email")
 
+        subscription_items = (
+            self._value(self._value(subscription, "items"), "data") or []
+        )
+        primary_item = subscription_items[0] if subscription_items else None
+
         current_period_start = self._timestamp_to_iso(
-            self._value(
-                subscription,
-                "current_period_start",
-            )
+            self._value(primary_item, "current_period_start")
+            or self._value(subscription, "current_period_start")
         )
         current_period_end = self._timestamp_to_iso(
+            self._value(primary_item, "current_period_end")
+            or self._value(subscription, "current_period_end")
+        )
+        cancel_at_period_end = bool(
             self._value(
                 subscription,
-                "current_period_end",
+                "cancel_at_period_end",
+                False,
+            )
+        )
+        canceled_at = self._timestamp_to_iso(
+            self._value(
+                subscription,
+                "canceled_at",
+            )
+        )
+        trial_end = self._timestamp_to_iso(
+            self._value(
+                subscription,
+                "trial_end",
             )
         )
 
@@ -291,6 +311,9 @@ class BillingService:
                 stripe_price_id=price_id,
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
+                cancel_at_period_end=cancel_at_period_end,
+                canceled_at=canceled_at,
+                trial_end=trial_end,
             )
 
             if updated:
@@ -305,6 +328,9 @@ class BillingService:
                 stripe_price_id=price_id,
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
+                cancel_at_period_end=cancel_at_period_end,
+                canceled_at=canceled_at,
+                trial_end=trial_end,
             )
 
             if updated:
@@ -320,6 +346,9 @@ class BillingService:
                 subscription_status=status,
                 current_period_start=current_period_start,
                 current_period_end=current_period_end,
+                cancel_at_period_end=cancel_at_period_end,
+                canceled_at=canceled_at,
+                trial_end=trial_end,
             )
 
     def handle_checkout_completed(

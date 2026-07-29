@@ -35,7 +35,8 @@ class SupabaseService:
         return (
             "id,email,plan,subscription_status,current_period_start,"
             "current_period_end,created_at,stripe_customer_id,"
-            "stripe_subscription_id,stripe_price_id"
+            "stripe_subscription_id,stripe_price_id,"
+            "cancel_at_period_end,canceled_at,trial_end"
         )
 
     def get_plan_by_email(self, email: str) -> str:
@@ -211,11 +212,17 @@ class SupabaseService:
         subscription_status: str = "active",
         current_period_start: str | None = None,
         current_period_end: str | None = None,
+        cancel_at_period_end: bool = False,
+        canceled_at: str | None = None,
+        trial_end: str | None = None,
     ) -> None:
         payload: dict[str, Any] = {
             "email": email,
             "plan": plan,
             "subscription_status": subscription_status,
+            "cancel_at_period_end": cancel_at_period_end,
+            "canceled_at": canceled_at,
+            "trial_end": trial_end,
         }
 
         if stripe_customer_id:
@@ -269,6 +276,9 @@ class SupabaseService:
         stripe_price_id: str | None,
         current_period_start: str | None,
         current_period_end: str | None,
+        cancel_at_period_end: bool = False,
+        canceled_at: str | None = None,
+        trial_end: str | None = None,
     ) -> bool:
         result = (
             self.client.table("profiles")
@@ -281,6 +291,9 @@ class SupabaseService:
                     "stripe_price_id": stripe_price_id,
                     "current_period_start": current_period_start,
                     "current_period_end": current_period_end,
+                    "cancel_at_period_end": cancel_at_period_end,
+                    "canceled_at": canceled_at,
+                    "trial_end": trial_end,
                 }
             )
             .eq("id", user_id)
@@ -299,6 +312,9 @@ class SupabaseService:
         stripe_price_id: str | None,
         current_period_start: str | None,
         current_period_end: str | None,
+        cancel_at_period_end: bool = False,
+        canceled_at: str | None = None,
+        trial_end: str | None = None,
     ) -> bool:
         result = (
             self.client.table("profiles")
@@ -310,6 +326,9 @@ class SupabaseService:
                     "stripe_price_id": stripe_price_id,
                     "current_period_start": current_period_start,
                     "current_period_end": current_period_end,
+                    "cancel_at_period_end": cancel_at_period_end,
+                    "canceled_at": canceled_at,
+                    "trial_end": trial_end,
                 }
             )
             .eq(

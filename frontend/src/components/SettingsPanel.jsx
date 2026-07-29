@@ -112,6 +112,19 @@ export default function SettingsPanel() {
     profile?.current_period_end ||
     entitlements?.period_end
 
+  const cancelAtPeriodEnd = Boolean(
+    profile?.cancel_at_period_end ??
+      entitlements?.cancel_at_period_end,
+  )
+
+  const canceledAt =
+    profile?.canceled_at ||
+    entitlements?.canceled_at
+
+  const trialEnd =
+    profile?.trial_end ||
+    entitlements?.trial_end
+
   const emailVerified = Boolean(
     user?.email_confirmed_at ||
       user?.confirmed_at,
@@ -373,7 +386,18 @@ export default function SettingsPanel() {
           <div className="settings-card-copy">
             <span>Subscription</span>
             <strong>{planName}</strong>
-            <small>{subscriptionStatus}</small>
+            <small>
+              {cancelAtPeriodEnd
+                ? `Cancels on $
+            {formatDate(periodEnd)}`
+                : canceledAt
+                  ? `Canceled on $
+            {formatDate(canceledAt)}`
+                  : trialEnd
+                    ? `Trial ends $
+            {formatDate(trialEnd)}`
+                    : subscriptionStatus}
+            </small>
           </div>
 
           <button

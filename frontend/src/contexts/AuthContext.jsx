@@ -32,7 +32,8 @@ export function AuthProvider({ children }) {
       .from('profiles')
       .select(
         'id,email,plan,subscription_status,current_period_start,' +
-          'current_period_end,created_at',
+          'current_period_end,cancel_at_period_end,canceled_at,' +
+            'trial_end,created_at',
       )
       .eq('id', user.id)
       .maybeSingle()

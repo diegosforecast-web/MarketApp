@@ -306,6 +306,12 @@ class EntitlementService:
             "subscription_status": (
                 profile.get("subscription_status") or plan
             ),
+            "cancel_at_period_end": bool(
+
+            profile.get("cancel_at_period_end", False)
+            ),
+            "canceled_at": profile.get("canceled_at"),
+            "trial_end": profile.get("trial_end"),
             "supported_horizons": supported,
             "unlimited_horizon": unlimited_horizon,
             "allowed_base_horizons": allowed_base_horizons,
