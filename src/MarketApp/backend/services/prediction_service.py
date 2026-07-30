@@ -4,10 +4,11 @@ from datetime import date, datetime, timedelta
 
 from ensemble.decision_engine import EnsembleDecisionEngine
 from schemas.prediction import PredictionRequest
-from schemas.response import ForecastTrajectoryPoint, PredictionResponse
+from schemas.response import ForecastTrajectoryPoint
 from services.entitlement_service import EntitlementService
 from services.market_data_service import MarketDataService
 from services.prediction_history_service import PredictionHistoryService
+from services.response_builder import ResponseBuilder
 
 
 class PredictionService:
@@ -16,6 +17,7 @@ class PredictionService:
         self.ensemble = EnsembleDecisionEngine()
         self.history = PredictionHistoryService()
         self.entitlements = EntitlementService()
+        self.response_builder = ResponseBuilder()
 
     def supported_horizons(self) -> list[int]:
         return self.ensemble.supported_horizons()
@@ -248,13 +250,21 @@ class PredictionService:
             final_decision=decision,
         )
 
-        response = PredictionResponse(
+        forecast_price = round(
+            current_price * (1 + decision.expected_return),
+            2,
+        )
+        forecast_collection = (
+            self.response_builder.build_forecast_collection(
+                expected_price=forecast_price,
+                trajectory=trajectory,
+            )
+        )
+
+        response = self.response_builder.build_prediction_response(
             ticker=ticker,
             current_price=round(current_price, 2),
-            forecast_price=round(
-                current_price * (1 + decision.expected_return),
-                2,
-            ),
+            forecast_price=forecast_price,
             expected_move_pct=round(
                 decision.expected_return * 100,
                 2,
@@ -278,6 +288,7 @@ class PredictionService:
             explanation=decision.explanation,
             historical_confidence=decision.historical_confidence,
             trajectory=trajectory,
+            forecast_collection=forecast_collection,
         )
 
         saved = self.history.record(
