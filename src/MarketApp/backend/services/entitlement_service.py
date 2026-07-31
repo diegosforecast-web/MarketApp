@@ -323,6 +323,75 @@ class EntitlementService:
             "period_end": period_end.isoformat(),
         }
 
+    def authorize_daily_selection(
+        self,
+        *,
+        user_id: str,
+        administrator: bool = False,
+    ) -> dict[str, Any]:
+        """Authorize PE1-006 Premium Daily Selection behavior.
+
+        Premium receives one immutable selection per market day. Gold and
+        explicitly authenticated administrators receive the complete Forecast
+        Collection simultaneously and therefore do not create a daily lock.
+        Explorer and Standard are not authorized for this capability.
+        """
+        if administrator:
+            return {
+                "allowed": True,
+                "mode": "simultaneous",
+                "plan": "administrator",
+                "reason": None,
+            }
+
+        profile = self._profile_for_user(user_id)
+        plan = self._normalize_plan(profile.get("plan"))
+        status = str(
+            profile.get("subscription_status") or plan
+        ).strip().lower()
+
+        inactive_statuses = {
+            "canceled",
+            "cancelled",
+            "expired",
+            "incomplete_expired",
+            "unpaid",
+        }
+        if status in inactive_statuses:
+            raise EntitlementError(
+                "An active Premium or Gold subscription is required.",
+                entitlements={
+                    "plan": plan,
+                    "subscription_status": status,
+                    "daily_selection_mode": None,
+                },
+            )
+
+        if plan == PLAN_PREMIUM:
+            return {
+                "allowed": True,
+                "mode": "locked_selection",
+                "plan": plan,
+                "reason": None,
+            }
+
+        if plan == PLAN_GOLD:
+            return {
+                "allowed": True,
+                "mode": "simultaneous",
+                "plan": plan,
+                "reason": None,
+            }
+
+        raise EntitlementError(
+            "Premium Daily Selection requires a Premium or Gold plan.",
+            entitlements={
+                "plan": plan,
+                "subscription_status": status,
+                "daily_selection_mode": None,
+            },
+        )
+
     def authorize(
         self,
         *,
