@@ -14,6 +14,12 @@ class ForecastTrajectoryPoint(BaseModel):
     source: str
 
 
+class ForecastCollection(BaseModel):
+    lowest_expected_price: float
+    expected_price: float
+    highest_expected_price: float
+
+
 class PredictionResponse(BaseModel):
     ticker: str
     current_price: float
@@ -30,3 +36,4 @@ class PredictionResponse(BaseModel):
     explanation: dict[str, Any] | None = None
     historical_confidence: dict[str, Any] | None = None
     trajectory: list[ForecastTrajectoryPoint] = Field(default_factory=list)
+    forecast_collection: ForecastCollection | None = None

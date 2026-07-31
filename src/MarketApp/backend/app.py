@@ -8,6 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from endpoints.billing import router as billing_router
 from endpoints.community import router as community_router
+from endpoints.daily_selection import router as daily_selection_router
 from endpoints.entitlements import router as entitlements_router
 from endpoints.forecast import router as forecast_router
 from endpoints.history import router as history_router
@@ -111,6 +112,12 @@ app.include_router(
     community_router,
     prefix="/community",
     tags=["Community"],
+)
+
+app.include_router(
+    daily_selection_router,
+    prefix="/daily-selection",
+    tags=["Premium Daily Selection"],
 )
 
 # The router remains mounted in every environment so production requests get a
