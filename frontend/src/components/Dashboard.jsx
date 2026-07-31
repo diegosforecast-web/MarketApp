@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import ForecastTrajectory from './ForecastTrajectory'
 import Community from './Community'
 import PortfolioIntelligence from './PortfolioIntelligence'
+import PremiumDailySelection from './PremiumDailySelection'
 import PredictionHistory from './PredictionHistory'
 import './Dashboard.css'
 import './PredictionHistory.css'
@@ -623,6 +624,8 @@ export default function Dashboard() {
               </select>
             </div>
           </label>
+
+          <PremiumDailySelection />
 
           <button className="run-forecast-button" disabled={busy}>
             <BrainCircuit size={20}/>
