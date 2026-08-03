@@ -1706,3 +1706,58 @@ html{scroll-behavior:smooth}
     grid-template-columns: 1fr;
   }
 }
+
+
+/* PE1-007B: backend-authoritative forecast presentation */
+.forecast-collection-presentation {
+  display: grid;
+  gap: 18px;
+  border: 1px solid rgba(245, 197, 66, .28);
+  border-radius: 24px;
+  background: linear-gradient(135deg, rgba(52, 39, 10, .78), rgba(17, 13, 32, .9));
+  padding: 24px;
+}
+
+.forecast-collection-presentation h3 {
+  margin: 5px 0 4px;
+  color: #fff8db;
+}
+
+.forecast-collection-presentation p {
+  margin: 0;
+  color: #c8bb8d;
+}
+
+.forecast-collection-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.forecast-collection-grid article {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(245, 197, 66, .2);
+  border-radius: 16px;
+  background: rgba(6, 10, 27, .58);
+  padding: 17px;
+}
+
+.forecast-collection-grid span {
+  color: #c8bb8d;
+  font-size: .78rem;
+  font-weight: 800;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+}
+
+.forecast-collection-grid strong {
+  color: #ffe891;
+  font-size: 1.45rem;
+}
+
+@media (max-width: 720px) {
+  .forecast-collection-grid {
+    grid-template-columns: 1fr;
+  }
+}

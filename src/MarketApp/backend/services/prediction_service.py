@@ -5,6 +5,10 @@ from datetime import date, datetime, timedelta
 from ensemble.decision_engine import EnsembleDecisionEngine
 from schemas.prediction import PredictionRequest
 from schemas.response import ForecastTrajectoryPoint
+from services.daily_selection_service import (
+    DailySelectionError,
+    DailySelectionService,
+)
 from services.entitlement_service import EntitlementService
 from services.market_data_service import MarketDataService
 from services.prediction_history_service import PredictionHistoryService
@@ -17,6 +21,9 @@ class PredictionService:
         self.ensemble = EnsembleDecisionEngine()
         self.history = PredictionHistoryService()
         self.entitlements = EntitlementService()
+        self.daily_selection = DailySelectionService(
+            entitlement_service=self.entitlements,
+        )
         self.response_builder = ResponseBuilder()
 
     def supported_horizons(self) -> list[int]:
@@ -210,11 +217,30 @@ class PredictionService:
 
         return trajectory
 
+
+    def _daily_selection_state(
+        self,
+        *,
+        user_id: str,
+        administrator: bool = False,
+    ) -> dict | None:
+        """Resolve presentation state without making forecast availability depend on it."""
+        try:
+            return self.daily_selection.get_active(
+                user_id=user_id,
+                administrator=administrator,
+            )
+        except (DailySelectionError, RuntimeError):
+            # Explorer/Standard users, weekend dates, and temporary selection
+            # persistence failures retain the backward-compatible forecast.
+            return None
+
     async def predict(
         self,
         request: PredictionRequest,
         *,
         user_id: str,
+        administrator: bool = False,
     ) -> dict:
         ticker = request.ticker.strip().upper()
         horizon = int(request.horizon)
@@ -260,6 +286,22 @@ class PredictionService:
                 trajectory=trajectory,
             )
         )
+        daily_selection_state = self._daily_selection_state(
+            user_id=user_id,
+            administrator=administrator,
+        )
+        forecast_presentation = (
+            self.response_builder.build_forecast_presentation(
+                forecast_price=forecast_price,
+                forecast_collection=forecast_collection,
+                daily_selection_state=daily_selection_state,
+            )
+        )
+        authorization_context = (
+            self.response_builder.authorization_context_for_presentation(
+                daily_selection_state
+            )
+        )
 
         response = self.response_builder.build_prediction_response(
             ticker=ticker,
@@ -289,6 +331,8 @@ class PredictionService:
             historical_confidence=decision.historical_confidence,
             trajectory=trajectory,
             forecast_collection=forecast_collection,
+            forecast_presentation=forecast_presentation,
+            authorization_context=authorization_context,
         )
 
         saved = self.history.record(

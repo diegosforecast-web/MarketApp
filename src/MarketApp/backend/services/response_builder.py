@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 from collections.abc import Mapping
+from datetime import date
 from typing import Any
 
 from schemas.response import (
     ForecastCollection,
+    ForecastPresentation,
     ForecastTrajectoryPoint,
     PredictionResponse,
 )
@@ -15,6 +17,11 @@ class ResponseBuilder:
 
     _LOWEST_FORECAST_ENTITLEMENT = "lowest_forecast"
     _HIGHEST_FORECAST_ENTITLEMENT = "highest_forecast"
+    _SELECTION_FIELD_MAP = {
+        "lowest": "lowest_expected_price",
+        "expected": "expected_price",
+        "highest": "highest_expected_price",
+    }
 
     @staticmethod
     def build_forecast_collection(
@@ -47,6 +54,95 @@ class ResponseBuilder:
         )
 
     @classmethod
+    def build_forecast_presentation(
+        cls,
+        *,
+        forecast_price: float | None,
+        forecast_collection: ForecastCollection | None,
+        daily_selection_state: Mapping[str, Any] | None = None,
+    ) -> ForecastPresentation:
+        """Resolve the backend-authoritative forecast presentation.
+
+        The daily-selection service supplies mode, selection, market day, and
+        lock state. This method only maps that resolved state to prices already
+        produced by the forecast pipeline.
+        """
+        fallback_price = (
+            round(float(forecast_price), 2)
+            if forecast_price is not None
+            else None
+        )
+
+        if not daily_selection_state:
+            return ForecastPresentation(
+                mode="legacy",
+                display_price=fallback_price,
+            )
+
+        mode = str(daily_selection_state.get("mode") or "legacy")
+        market_day = daily_selection_state.get("market_day")
+        if market_day is not None and not isinstance(market_day, date):
+            market_day = date.fromisoformat(str(market_day))
+
+        if mode == "simultaneous":
+            display_price = (
+                forecast_collection.expected_price
+                if forecast_collection is not None
+                else fallback_price
+            )
+            return ForecastPresentation(
+                mode="simultaneous",
+                display_price=display_price,
+                market_day=market_day,
+                locked=bool(daily_selection_state.get("locked", False)),
+            )
+
+        if mode == "locked_selection":
+            raw_selection = daily_selection_state.get("selection")
+            selection = (
+                str(raw_selection).strip().lower()
+                if raw_selection is not None
+                else None
+            )
+            if selection not in cls._SELECTION_FIELD_MAP:
+                selection = None
+
+            display_price = fallback_price
+            if selection and forecast_collection is not None:
+                display_price = getattr(
+                    forecast_collection,
+                    cls._SELECTION_FIELD_MAP[selection],
+                )
+
+            return ForecastPresentation(
+                mode="locked_selection",
+                selection=selection,
+                display_price=display_price,
+                market_day=market_day,
+                locked=bool(daily_selection_state.get("locked", False)),
+            )
+
+        return ForecastPresentation(
+            mode="legacy",
+            display_price=fallback_price,
+        )
+
+    @classmethod
+    def authorization_context_for_presentation(
+        cls,
+        daily_selection_state: Mapping[str, Any] | None,
+    ) -> dict[str, bool]:
+        """Expose the complete collection only for simultaneous presentation."""
+        simultaneous = bool(
+            daily_selection_state
+            and daily_selection_state.get("mode") == "simultaneous"
+        )
+        return {
+            cls._LOWEST_FORECAST_ENTITLEMENT: simultaneous,
+            cls._HIGHEST_FORECAST_ENTITLEMENT: simultaneous,
+        }
+
+    @classmethod
     def filter_prediction_response(
         cls,
         *,
@@ -56,9 +152,9 @@ class ResponseBuilder:
         """Filter response composition using centralized entitlement results.
 
         The caller supplies capability decisions resolved by the entitlement
-        service. The builder does not infer access from plan names. Omitting an
-        authorization context preserves the existing response contract during
-        migration.
+        and daily-selection services. The builder does not infer access from
+        plan names. Omitting an authorization context preserves the existing
+        response contract during migration.
         """
         filtered = response.model_copy(deep=True)
 
@@ -78,10 +174,6 @@ class ResponseBuilder:
             )
         )
 
-        # The expected/average forecast remains available through the existing
-        # forecast_price field. The additive collection is exposed only when
-        # both range capabilities are authorized, avoiding partial or
-        # misleading range objects.
         if not (can_view_lowest and can_view_highest):
             filtered.forecast_collection = None
 
@@ -107,6 +199,7 @@ class ResponseBuilder:
         historical_confidence: dict[str, Any] | None = None,
         trajectory: list[ForecastTrajectoryPoint] | None = None,
         forecast_collection: ForecastCollection | None = None,
+        forecast_presentation: ForecastPresentation | None = None,
         authorization_context: Mapping[str, Any] | None = None,
     ) -> PredictionResponse:
         """Build, then authorization-filter, a backward-compatible response."""
@@ -127,6 +220,7 @@ class ResponseBuilder:
             historical_confidence=historical_confidence,
             trajectory=list(trajectory or []),
             forecast_collection=forecast_collection,
+            forecast_presentation=forecast_presentation,
         )
 
         return cls.filter_prediction_response(
