@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import {
   Activity, BarChart3, BellRing, BrainCircuit, BriefcaseBusiness, CheckCircle2, ChevronRight,
-  CircleAlert, Clock3, CreditCard, Gauge, Gift, History, LogOut, MessageSquareText, Search, Settings, ShieldCheck, Sparkles, Star, TrendingDown,
+  CircleAlert, Clock3, CreditCard, Gauge, Gift, LogOut, MessageSquareText, Search, Settings, ShieldCheck, Sparkles, Star, TrendingDown,
   TrendingUp, UserCircle2, WandSparkles, X,
 } from 'lucide-react'
 
@@ -10,6 +10,7 @@ import { supabase } from '../lib/supabase'
 import ForecastTrajectory from './ForecastTrajectory'
 import Community from './Community'
 import PortfolioIntelligence from './PortfolioIntelligence'
+import PremiumDailySelection from './PremiumDailySelection'
 import PredictionHistory from './PredictionHistory'
 import './Dashboard.css'
 import './PredictionHistory.css'
@@ -94,6 +95,14 @@ function money(value) {
   return new Intl.NumberFormat('en-US', {
     style: 'currency', currency: 'USD', maximumFractionDigits: 2,
   }).format(Number(value))
+}
+
+function selectionLabel(value) {
+  return String(value || '')
+    .split('_')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ')
 }
 
 function percent(value, digits = 2) {
@@ -462,6 +471,21 @@ export default function Dashboard() {
   const isSellSignal = recommendationLabel === 'SELL'
   const supportiveDrivers = isSellSignal ? negatives : positives
   const opposingDrivers = isSellSignal ? positives : negatives
+  const forecastPresentation = prediction?.forecast_presentation
+  const presentedForecastPrice =
+    forecastPresentation?.display_price ?? prediction?.forecast_price
+  const presentedSelection = String(
+    forecastPresentation?.selection || '',
+  )
+  const forecastPriceLabel =
+    forecastPresentation?.mode === 'locked_selection' && presentedSelection
+      ? `${selectionLabel(presentedSelection)} Forecast`
+      : forecastPresentation?.mode === 'simultaneous'
+        ? 'Expected Forecast'
+        : 'Forecast Price'
+  const forecastPriceNote = forecastPresentation?.market_day
+    ? `Market day ${forecastPresentation.market_day}`
+    : `${prediction?.horizon || horizon}-day estimate`
 
   return <div className="dimarket-shell">
     <aside className="dimarket-sidebar">
@@ -624,6 +648,8 @@ export default function Dashboard() {
             </div>
           </label>
 
+          <PremiumDailySelection />
+
           <button className="run-forecast-button" disabled={busy}>
             <BrainCircuit size={20}/>
             {busy ? 'Running AI analysis...' : 'Run AI Forecast'}
@@ -712,7 +738,7 @@ export default function Dashboard() {
           <div className="prediction-main-grid">
             <div className="prediction-metrics-grid">
               <Metric icon={Activity} label="Current Price" value={money(prediction.current_price)} note="Latest available close"/>
-              <Metric icon={TrendingUp} label="Forecast Price" value={money(prediction.forecast_price)} note={`${prediction.horizon}-day estimate`}/>
+              <Metric icon={TrendingUp} label={forecastPriceLabel} value={money(presentedForecastPrice)} note={forecastPriceNote}/>
               <Metric
                 icon={Number(prediction.expected_move_pct) >= 0 ? TrendingUp : TrendingDown}
                 label="Expected Move"
@@ -724,6 +750,30 @@ export default function Dashboard() {
             <GaugeCard value={prediction.confidence} level={prediction.confidence_level}/>
           </div>
         </section>
+
+        {forecastPresentation?.mode === 'simultaneous' && prediction.forecast_collection && (
+          <section className="forecast-collection-presentation" aria-labelledby="forecast-collection-title">
+            <div>
+              <span className="dashboard-eyebrow">FORECAST COLLECTION</span>
+              <h3 id="forecast-collection-title">Three coordinated forecast views</h3>
+              <p>All values are resolved and authorized by the backend.</p>
+            </div>
+            <div className="forecast-collection-grid">
+              <article>
+                <span>Lowest expected</span>
+                <strong>{money(prediction.forecast_collection.lowest_expected_price)}</strong>
+              </article>
+              <article>
+                <span>Expected</span>
+                <strong>{money(prediction.forecast_collection.expected_price)}</strong>
+              </article>
+              <article>
+                <span>Highest expected</span>
+                <strong>{money(prediction.forecast_collection.highest_expected_price)}</strong>
+              </article>
+            </div>
+          </section>
+        )}
 
         <ForecastTrajectory trajectory={prediction.trajectory} ticker={prediction.ticker}/>
 

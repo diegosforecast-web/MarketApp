@@ -1,4 +1,5 @@
-from typing import Any
+from datetime import date
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -20,6 +21,14 @@ class ForecastCollection(BaseModel):
     highest_expected_price: float
 
 
+class ForecastPresentation(BaseModel):
+    mode: Literal["legacy", "locked_selection", "simultaneous"]
+    selection: Literal["lowest", "expected", "highest"] | None = None
+    display_price: float | None = None
+    market_day: date | None = None
+    locked: bool = False
+
+
 class PredictionResponse(BaseModel):
     ticker: str
     current_price: float
@@ -37,3 +46,4 @@ class PredictionResponse(BaseModel):
     historical_confidence: dict[str, Any] | None = None
     trajectory: list[ForecastTrajectoryPoint] = Field(default_factory=list)
     forecast_collection: ForecastCollection | None = None
+    forecast_presentation: ForecastPresentation | None = None

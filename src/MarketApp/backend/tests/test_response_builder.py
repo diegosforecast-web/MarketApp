@@ -1,5 +1,6 @@
 from schemas.response import (
     ForecastCollection,
+    ForecastPresentation,
     ForecastTrajectoryPoint,
     PredictionResponse,
 )
@@ -119,6 +120,7 @@ def test_build_prediction_response_preserves_existing_schema() -> None:
         "historical_confidence": {"sample_size": 10},
         "trajectory": [trajectory[0].model_dump()],
         "forecast_collection": collection.model_dump(),
+        "forecast_presentation": None,
     }
 
 
@@ -298,3 +300,125 @@ def test_filtering_does_not_mutate_generated_response() -> None:
     assert original.forecast_collection == _full_forecast_collection()
     assert filtered.forecast_price == original.forecast_price
     assert filtered.trajectory == original.trajectory
+
+
+def test_legacy_presentation_preserves_forecast_price() -> None:
+    presentation = ResponseBuilder.build_forecast_presentation(
+        forecast_price=105.0,
+        forecast_collection=_full_forecast_collection(),
+    )
+
+    assert presentation == ForecastPresentation(
+        mode="legacy",
+        display_price=105.0,
+    )
+
+
+def test_premium_locked_selection_resolves_selected_price() -> None:
+    presentation = ResponseBuilder.build_forecast_presentation(
+        forecast_price=105.0,
+        forecast_collection=_full_forecast_collection(),
+        daily_selection_state={
+            "mode": "locked_selection",
+            "selection": "highest",
+            "market_day": "2026-07-31",
+            "locked": True,
+        },
+    )
+
+    assert presentation == ForecastPresentation(
+        mode="locked_selection",
+        selection="highest",
+        display_price=108.0,
+        market_day="2026-07-31",
+        locked=True,
+    )
+
+
+def test_missing_premium_selection_uses_expected_fallback() -> None:
+    presentation = ResponseBuilder.build_forecast_presentation(
+        forecast_price=105.0,
+        forecast_collection=_full_forecast_collection(),
+        daily_selection_state={
+            "mode": "locked_selection",
+            "selection": None,
+            "market_day": "2026-07-31",
+            "locked": False,
+        },
+    )
+
+    assert presentation.mode == "locked_selection"
+    assert presentation.selection is None
+    assert presentation.display_price == 105.0
+    assert presentation.locked is False
+
+
+def test_gold_simultaneous_presentation_keeps_collection() -> None:
+    state = {
+        "mode": "simultaneous",
+        "selection": None,
+        "market_day": "2026-07-31",
+        "locked": False,
+    }
+    presentation = ResponseBuilder.build_forecast_presentation(
+        forecast_price=105.0,
+        forecast_collection=_full_forecast_collection(),
+        daily_selection_state=state,
+    )
+    response = ResponseBuilder.build_prediction_response(
+        ticker="AAPL",
+        current_price=100.0,
+        forecast_price=105.0,
+        expected_move_pct=5.0,
+        confidence=80,
+        confidence_level="HIGH",
+        horizon=5,
+        recommendation="BUY",
+        model="test",
+        details_available=True,
+        forecast_collection=_full_forecast_collection(),
+        forecast_presentation=presentation,
+        authorization_context=(
+            ResponseBuilder.authorization_context_for_presentation(state)
+        ),
+    )
+
+    assert presentation.mode == "simultaneous"
+    assert presentation.display_price == 105.0
+    assert response.forecast_collection == _full_forecast_collection()
+
+
+def test_premium_response_hides_raw_collection_but_keeps_resolved_price() -> None:
+    state = {
+        "mode": "locked_selection",
+        "selection": "lowest",
+        "market_day": "2026-07-31",
+        "locked": True,
+    }
+    presentation = ResponseBuilder.build_forecast_presentation(
+        forecast_price=105.0,
+        forecast_collection=_full_forecast_collection(),
+        daily_selection_state=state,
+    )
+    response = ResponseBuilder.build_prediction_response(
+        ticker="AAPL",
+        current_price=100.0,
+        forecast_price=105.0,
+        expected_move_pct=5.0,
+        confidence=80,
+        confidence_level="HIGH",
+        horizon=5,
+        recommendation="BUY",
+        model="test",
+        details_available=True,
+        forecast_collection=_full_forecast_collection(),
+        forecast_presentation=presentation,
+        authorization_context=(
+            ResponseBuilder.authorization_context_for_presentation(state)
+        ),
+    )
+
+    assert response.forecast_price == 105.0
+    assert response.forecast_collection is None
+    assert response.forecast_presentation is not None
+    assert response.forecast_presentation.display_price == 101.0
