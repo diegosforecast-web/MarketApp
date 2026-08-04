@@ -65,25 +65,26 @@ const PLAN_CARDS = [
     key: 'premium',
     name: 'Premium',
     price: '$16.00 / month',
-    tagline: 'Professional decision support.',
-    access: 'Unlimited 1-5 day forecasts - 3 monthly 15-day credits',
+    tagline: 'Focus each market day on the forecast view that fits your strategy.',
+    access: 'Unlimited 1–5 day forecasts · 3 monthly 15-day credits',
     features: [
-      'Historical validation',
-      'Stored prediction tracking',
-      'PDF reports',
+      'Premium Daily Selection',
+      'Choose lowest, expected, or highest forecast',
+      'Selection locked securely for the market day',
+      'Historical validation and prediction tracking',
     ],
   },
   {
     key: 'gold',
     name: 'Gold',
     price: '$24.99 / month',
-    tagline: 'The complete DiMarket experience.',
+    tagline: 'Compare the complete forecast range in one coordinated view.',
     access: 'Unlimited forecasts across every production-supported horizon',
     features: [
-      'Extended-horizon confidence messaging',
+      'Complete Forecast Collection',
+      'Compare conservative, expected, and optimistic scenarios',
       'Portfolio intelligence',
-      'Scenario analysis',
-      'API access',
+      'Extended-horizon confidence messaging',
     ],
   },
 ]
@@ -172,11 +173,9 @@ export default function Dashboard() {
   const planKey = String(entitlements?.plan || profile?.plan || 'free').toLowerCase()
   const planName = PLAN_NAMES[planKey] || 'Explorer'
   const planRank = { free: 0, standard: 1, premium: 2, gold: 3 }
-  const visiblePlanCards = planKey === 'free'
-    ? PLAN_CARDS
-    : PLAN_CARDS.filter(
-        (plan) => planRank[plan.key] > planRank[planKey],
-      )
+  const visiblePlanCards = PLAN_CARDS.filter(
+    (plan) => planRank[plan.key] >= planRank[planKey],
+  )
   const firstName =
     profile?.full_name ||
     user?.user_metadata?.full_name ||
@@ -1084,7 +1083,6 @@ export default function Dashboard() {
 
       <SettingsPanel />
 
-      {planKey !== 'gold' && (
       <section id="plans" className="plans-section">
         <div className="section-heading">
           <div>
@@ -1104,7 +1102,7 @@ export default function Dashboard() {
             >
               {plan.key === planKey && (
                 <span className="current-plan-label">
-                  CURRENT EXPERIENCE
+                  CURRENT PLAN
                 </span>
               )}
 
@@ -1133,14 +1131,14 @@ export default function Dashboard() {
                 type="button"
                 disabled={
                   Boolean(billingBusy) ||
-                  (plan.key === 'free' && planKey === 'free')
+                  plan.key === planKey
                 }
                 onClick={() => handlePlanAction(plan.key)}
               >
                 {billingBusy === plan.key
                   ? 'Opening Stripe...'
                   : plan.key === planKey
-                    ? 'Your current experience'
+                    ? 'Current plan'
                     : planKey !== 'free'
                       ? 'Change plan'
                       : 'Choose this experience'}
@@ -1150,9 +1148,6 @@ export default function Dashboard() {
           ))}
         </div>
       </section>
-      )}
-
-      
 
       {forecastWarning && (
         <div className="forecast-warning-backdrop">

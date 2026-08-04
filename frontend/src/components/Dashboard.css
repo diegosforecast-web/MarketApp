@@ -1239,6 +1239,64 @@
   line-height: 1.45;
 }
 
+.plan-card {
+  position: relative;
+}
+
+.plan-current {
+  border-color: rgba(89, 225, 255, .48);
+  background:
+    radial-gradient(circle at 50% 0, rgba(89, 225, 255, .1), transparent 42%),
+    rgba(3, 9, 32, .78);
+  box-shadow: 0 0 0 1px rgba(89, 225, 255, .08);
+}
+
+.plan-current.plan-premium {
+  border-color: rgba(192, 132, 252, .52);
+  background:
+    radial-gradient(circle at 50% 0, rgba(192, 132, 252, .14), transparent 44%),
+    rgba(3, 9, 32, .78);
+}
+
+.plan-current.plan-gold {
+  border-color: rgba(250, 204, 21, .55);
+  background:
+    radial-gradient(circle at 50% 0, rgba(250, 204, 21, .16), transparent 44%),
+    rgba(3, 9, 32, .8);
+}
+
+.current-plan-label {
+  display: inline-flex;
+  align-items: center;
+  width: fit-content;
+  border: 1px solid rgba(89, 225, 255, .3);
+  border-radius: 999px;
+  background: rgba(89, 225, 255, .09);
+  color: #b9f4fb;
+  padding: 6px 9px;
+  font-size: .68rem;
+  font-weight: 900;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+
+.plan-premium .current-plan-label {
+  border-color: rgba(192, 132, 252, .34);
+  background: rgba(192, 132, 252, .1);
+  color: #e9d5ff;
+}
+
+.plan-gold .current-plan-label {
+  border-color: rgba(250, 204, 21, .34);
+  background: rgba(250, 204, 21, .1);
+  color: #fde68a;
+}
+
+.plan-current > button:disabled {
+  cursor: default;
+  opacity: .72;
+}
+
 @media (max-width: 580px) {
   .forecast-warning-dialog {
     grid-template-columns: 1fr;
