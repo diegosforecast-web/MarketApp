@@ -28,10 +28,14 @@ const PLAN_NAMES = {
 }
 
 const PLAN_COPY = {
-  free: 'Discover how DiMarket thinks with transparent AI analysis.',
-  standard: 'Unlimited 1-3 day forecasts plus three monthly 5-day credits.',
-  premium: 'Unlimited 1-5 day forecasts plus three monthly 15-day credits with an extended-horizon warning.',
-  gold: 'Unlimited access to every production-supported horizon with clear confidence messaging.',
+  free:
+    'Explore transparent AI forecasting with three complimentary forecasts and clear explanations.',
+  standard:
+    'Build confidence with unlimited short-horizon forecasting and three monthly 5-day opportunities.',
+  premium:
+    'Focus each market day on the forecast view that best matches your strategy, with extended-horizon access when you need it.',
+  gold:
+    'Compare the complete forecast range across every production-supported horizon for a broader decision view.',
 }
 
 const PLAN_CARDS = [
@@ -549,12 +553,12 @@ export default function Dashboard() {
           <h1>Welcome {planKey === 'free' ? 'to DiMarket' : 'back'}, {firstName}.</h1>
           <p>
             {planKey === 'free'
-              ? `Your Explorer experience includes ${forecastLimit ?? 3} complimentary forecasts so you can evaluate DiMarket's transparent AI.`
+              ? `Your Explorer plan includes ${forecastLimit ?? 3} complimentary forecasts so you can experience DiMarket's transparent AI before choosing your next step.`
               : planKey === 'standard'
-                ? 'Your Standard plan is active with unlimited short-horizon forecasts and monthly 5-day credits.'
+                ? 'Your Standard plan supports confident short-term decisions with unlimited 1–3 day forecasts and three monthly 5-day opportunities.'
                 : planKey === 'premium'
-                  ? 'Your Premium plan is active with professional forecasting, extended-horizon credits, and transparent prediction tracking.'
-                  : 'Your Gold plan is active with unlimited forecasting, Portfolio Intelligence, transparency, and community access.'}
+                  ? 'Your Premium plan helps you focus each market day on the forecast view that best matches your strategy, while preserving extended-horizon access.'
+                  : 'Your Gold plan gives you the complete forecast range so you can compare conservative, expected, and optimistic scenarios in one coordinated view.'}
           </p>
           <p className="welcome-philosophy">Markets are uncertain. Decisions do not have to be.</p>
           <a className="welcome-cta" href="#forecast">
@@ -1042,7 +1046,7 @@ export default function Dashboard() {
 
             {planKey === 'free' ? (
               <a className="welcome-cta" href="#plans">
-                View available plans
+                Compare plans and benefits
                 <ChevronRight size={18}/>
               </a>
             ) : (

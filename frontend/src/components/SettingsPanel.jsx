@@ -30,13 +30,14 @@ const PLAN_NAMES = {
 }
 
 const PLAN_DESCRIPTIONS = {
-  free: 'Complimentary access for discovering how DiMarket thinks.',
+  free:
+    'Explore transparent AI forecasting with three complimentary forecasts and clear explanations.',
   standard:
-    'Unlimited 1–3 day forecasts plus monthly 5-day credits.',
+    'Build confidence with unlimited 1–3 day forecasts and three monthly 5-day opportunities.',
   premium:
-    'Unlimited 1–5 day forecasts plus monthly 15-day credits.',
+    'Focus each market day on the forecast view that best matches your strategy, with extended-horizon access when needed.',
   gold:
-    'The complete DiMarket experience across every production-supported horizon.',
+    'Compare the complete forecast range across every production-supported horizon in one coordinated decision view.',
 }
 
 function formatDate(value) {
@@ -408,7 +409,7 @@ export default function SettingsPanel() {
             {busyAction === 'billing'
               ? 'Opening...'
               : planKey === 'free'
-                ? 'Explore plans'
+                ? 'Compare plans'
                 : 'Manage billing'}
           </button>
         </article>
