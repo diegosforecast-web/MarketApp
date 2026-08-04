@@ -3,10 +3,13 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta, timezone
 from typing import Any
 
+from fastapi.encoders import jsonable_encoder
+
 from services.market_data_service import MarketDataService
 from services.prediction_verification_service import PredictionVerificationService
 from services.supabase_service import SupabaseService
 from services.datetime_utils import parse_iso_datetime
+
 
 
 class PredictionHistoryService:
@@ -103,11 +106,8 @@ class PredictionHistoryService:
         }
 
     def record(self, *, user_id: str, prediction: Any) -> dict[str, Any]:
-        payload = (
-            prediction.model_dump()
-            if hasattr(prediction, "model_dump")
-            else dict(prediction)
-        )
+        payload = jsonable_encoder(prediction)
+
         saved = self.supabase.insert_prediction(
             user_id=user_id,
             payload=payload,
