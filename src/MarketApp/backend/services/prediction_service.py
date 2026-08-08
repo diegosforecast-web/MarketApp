@@ -11,6 +11,8 @@ from services.daily_selection_service import (
 )
 from services.entitlement_service import EntitlementService
 from services.market_data_service import MarketDataService
+from services.forecast_calibration_service import ForecastCalibrationService
+from services.model_registry import ModelRegistry
 from services.prediction_history_service import PredictionHistoryService
 from services.response_builder import ResponseBuilder
 
@@ -25,6 +27,8 @@ class PredictionService:
             entitlement_service=self.entitlements,
         )
         self.response_builder = ResponseBuilder()
+        self.model_registry = ModelRegistry()
+        self.forecast_calibration = ForecastCalibrationService()
 
     def supported_horizons(self) -> list[int]:
         return self.ensemble.supported_horizons()
@@ -280,11 +284,42 @@ class PredictionService:
             current_price * (1 + decision.expected_return),
             2,
         )
-        forecast_collection = (
-            self.response_builder.build_forecast_collection(
-                expected_price=forecast_price,
-                trajectory=trajectory,
+        model_task = self.model_registry.task_for_horizon(
+            "return_forecast",
+            horizon,
+        )
+        model_info = self.model_registry.get_model_info(model_task)
+        calibration = self.forecast_calibration.get(
+            horizon=horizon,
+            model_task=model_task,
+            model_version=str(model_info["version"]),
+        )
+        calibrated_bounds = (
+            self.forecast_calibration.build_price_bounds(
+                current_price=current_price,
+                expected_return=float(decision.expected_return),
+                calibration=calibration,
             )
+            if calibration is not None
+            else None
+        )
+        forecast_collection = self.response_builder.build_forecast_collection(
+            expected_price=forecast_price,
+            lower_price=(
+                calibrated_bounds[0]
+                if calibrated_bounds is not None
+                else None
+            ),
+            upper_price=(
+                calibrated_bounds[1]
+                if calibrated_bounds is not None
+                else None
+            ),
+            calibration=(
+                calibration.metadata()
+                if calibration is not None
+                else None
+            ),
         )
         daily_selection_state = self._daily_selection_state(
             user_id=user_id,

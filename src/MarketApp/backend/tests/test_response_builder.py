@@ -42,34 +42,60 @@ def _trajectory() -> list[ForecastTrajectoryPoint]:
     ]
 
 
-def test_build_forecast_collection_uses_existing_future_prices() -> None:
+def test_build_forecast_collection_uses_calibrated_bounds() -> None:
     collection = ResponseBuilder.build_forecast_collection(
         expected_price=105.0,
-        trajectory=_trajectory(),
-    )
-
-    assert collection == ForecastCollection(
-        lowest_expected_price=101.0,
-        expected_price=105.0,
-        highest_expected_price=105.0,
-    )
-
-
-def test_build_forecast_collection_excludes_current_price() -> None:
-    collection = ResponseBuilder.build_forecast_collection(
-        expected_price=105.0,
-        trajectory=_trajectory(),
+        lower_price=101.0,
+        upper_price=109.0,
+        calibration={
+            "method": "out_of_sample_return_residual_quantiles",
+            "model_task": "return_forecast_h5",
+            "model_version": "001",
+            "horizon": 5,
+            "lower_quantile": 0.10,
+            "upper_quantile": 0.90,
+            "intended_coverage": 0.80,
+            "sample_count": 200,
+            "calibration_start": "2024-01-01",
+            "calibration_end": "2025-12-31",
+            "generated_at": "2026-08-05T00:00:00+00:00",
+        },
     )
 
     assert collection is not None
-    assert collection.lowest_expected_price != 100.0
+    assert collection.lowest_expected_price == 101.0
+    assert collection.expected_price == 105.0
+    assert collection.highest_expected_price == 109.0
+    assert collection.calibration is not None
+    assert collection.calibration.sample_count == 200
+
+
+def test_build_forecast_collection_fails_closed_without_bounds() -> None:
+    assert (
+        ResponseBuilder.build_forecast_collection(
+            expected_price=105.0,
+        )
+        is None
+    )
+
+
+def test_build_forecast_collection_rejects_invalid_ordering() -> None:
+    assert (
+        ResponseBuilder.build_forecast_collection(
+            expected_price=105.0,
+            lower_price=106.0,
+            upper_price=109.0,
+        )
+        is None
+    )
 
 
 def test_build_forecast_collection_handles_missing_expected_price() -> None:
     assert (
         ResponseBuilder.build_forecast_collection(
             expected_price=None,
-            trajectory=_trajectory(),
+            lower_price=101.0,
+            upper_price=109.0,
         )
         is None
     )

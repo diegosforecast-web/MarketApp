@@ -27,30 +27,32 @@ class ResponseBuilder:
     def build_forecast_collection(
         *,
         expected_price: float | None,
-        trajectory: list[ForecastTrajectoryPoint] | None = None,
+        lower_price: float | None = None,
+        upper_price: float | None = None,
+        calibration: Mapping[str, Any] | None = None,
     ) -> ForecastCollection | None:
-        """Build an additive price collection from the existing forecast path.
+        """Build calibrated lower, expected, and upper forecast bounds.
 
-        The collection reuses prices already produced by the forecast pipeline.
-        It does not execute models or alter forecast generation. Day zero is
-        excluded because it represents the current market price rather than a
-        future expected price.
+        Bounds must be supplied by the forecast-calibration layer. The response
+        builder does not infer ranges from trajectories or presentation logic.
+        Invalid or unavailable calibration fails closed by returning no
+        collection while preserving the legacy expected forecast separately.
         """
-        if expected_price is None:
+        if expected_price is None or lower_price is None or upper_price is None:
             return None
 
         expected = round(float(expected_price), 2)
-        future_prices = [
-            round(float(point.price), 2)
-            for point in trajectory or []
-            if point.day > 0
-        ]
-        price_candidates = [expected, *future_prices]
+        lower = round(float(lower_price), 2)
+        upper = round(float(upper_price), 2)
+
+        if lower <= 0 or not lower <= expected <= upper:
+            return None
 
         return ForecastCollection(
-            lowest_expected_price=min(price_candidates),
+            lowest_expected_price=lower,
             expected_price=expected,
-            highest_expected_price=max(price_candidates),
+            highest_expected_price=upper,
+            calibration=dict(calibration or {}) or None,
         )
 
     @classmethod
